@@ -1,67 +1,31 @@
-import { NextResponse } from "next/server";
-import { db } from "@/lib/db";
-import { confirmBooking } from "@/lib/availability";
+import { randomUUID } from "node:crypto";
+import { z } from "zod";
+import { confirmIn } from "@/lib/availability";
+import { bookingTransaction } from "@/lib/booking/transaction";
 
-export const dynamic = "force-dynamic";
+const callback = z.object({ providerRef: z.string().min(1).max(100), outcome: z.enum(["SUCCESS", "PENDING", "FAILED"]) });
 
-/**
- * POST /api/payment/webhook — server-to-server callback from the gateway.
- *
- * CRITICAL RULE: a booking is marked CONFIRMED ONLY here (trusted server-side
- * verification), never from a browser redirect. Idempotent: repeated
- * callbacks for the same providerRef are no-ops.
- *
- * Sandbox adapter: the sandbox gateway posts { providerRef, outcome,
- * transactionId }. When the production gateway is confirmed, replace the
- * signature verification with the provider's scheme.
- */
+/** Sandbox simulation. The configured production gateway must provide its own verified callback. */
 export async function POST(req: Request) {
-  try {
-    const { providerRef, outcome, transactionId } = await req.json();
-    if (!providerRef || !outcome) {
-      return NextResponse.json({ error: "providerRef and outcome are required." }, { status: 400 });
+  if (process.env.ENABLE_SANDBOX_PAYMENTS !== "true") return Response.json({ error: "Sandbox payments are disabled." }, { status: 403 });
+  const parsed = callback.safeParse(await req.json().catch(() => null));
+  if (!parsed.success) return Response.json({ error: "Invalid payment callback." }, { status: 422 });
+  const { providerRef, outcome } = parsed.data;
+  return bookingTransaction(async (tx) => {
+    const payment = await tx.payment.findUnique({ where: { providerRef }, include: { booking: true } });
+    if (!payment || payment.provider !== "SANDBOX") return Response.json({ error: "Payment not found." }, { status: 404 });
+    if (payment.status === "SUCCESS" || payment.status === "FAILED" || payment.status === "REFUNDED") {
+      return Response.json({ ok: true, status: payment.status, duplicate: true });
     }
-
-    const payment = await db.payment.findUnique({ where: { providerRef: String(providerRef) } });
-    if (!payment) return NextResponse.json({ error: "Unknown payment reference." }, { status: 404 });
-
-    // Idempotency — already-final payments never reprocess.
-    if (payment.status === "SUCCESS") {
-      return NextResponse.json({ ok: true, status: "SUCCESS", duplicate: true });
+    if (outcome === "SUCCESS" && (payment.booking.status !== "PENDING_PAYMENT" || !await confirmIn(tx, payment.booking.reference, { paymentRef: providerRef }))) {
+      return Response.json({ code: "HOLD_EXPIRED", error: "The booking no longer has an active hold." }, { status: 409 });
     }
-    if (payment.status === "FAILED" && outcome === "FAILED") {
-      return NextResponse.json({ ok: true, status: "FAILED", duplicate: true });
-    }
-
-    if (outcome === "SUCCESS") {
-      await db.payment.update({
-        where: { providerRef: payment.providerRef },
-        data: { status: "SUCCESS", transactionId: transactionId || `TXN-${Date.now()}`, method: payment.method || "sandbox" },
-      });
-      const result = await confirmBooking(
-        (await db.booking.findUnique({ where: { id: payment.bookingId } }))?.reference || "",
-        payment.providerRef
-      );
-      return NextResponse.json({ ok: true, status: "SUCCESS", crmSync: result.crmSync });
-    }
-
-    if (outcome === "PENDING") {
-      await db.payment.update({ where: { providerRef: payment.providerRef }, data: { status: "PENDING" } });
-      return NextResponse.json({ ok: true, status: "PENDING" });
-    }
-
-    // FAILED
-    const reason = "Payment was declined by the gateway (sandbox).";
-    await db.payment.update({
-      where: { providerRef: payment.providerRef },
-      data: { status: "FAILED", failureReason: reason },
-    });
-    await db.auditLog.create({
-      data: { action: "PAYMENT_FAILED", entity: "Payment", entityRef: payment.providerRef },
-    });
-    return NextResponse.json({ ok: true, status: "FAILED", reason });
-  } catch (e) {
-    console.error("payment/webhook error", e);
-    return NextResponse.json({ error: "Webhook processing failed." }, { status: 500 });
-  }
+    const reason = outcome === "FAILED" ? "The sandbox gateway declined this payment." : null;
+    await tx.payment.update({ where: { providerRef }, data: {
+      status: outcome, failureReason: reason,
+      ...(outcome === "SUCCESS" ? { paidAt: new Date(), transactionId: randomUUID(), method: payment.method ?? "sandbox" } : {}),
+    } });
+    await tx.auditLog.create({ data: { action: `PAYMENT_${outcome}`, entity: "Payment", entityRef: providerRef } });
+    return Response.json({ ok: true, status: outcome, reason });
+  });
 }

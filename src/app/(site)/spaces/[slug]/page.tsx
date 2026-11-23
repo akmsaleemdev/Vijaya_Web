@@ -1,3 +1,4 @@
+import { pageMetadata, siteContent } from "@/lib/content";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -6,6 +7,7 @@ import {
   Maximize, PersonStanding, Ruler, Sparkles, Toilet, Users2, Video,
 } from "lucide-react";
 import { SPACES, SPACE_BY_SLUG, COMBO_RULES } from "@/lib/data/spaces";
+import { getPublicVenue } from "@/lib/venue-content";
 import { inr } from "@/lib/pricing";
 import { SLOTS, SHOW_VIRTUAL_TOUR } from "@/lib/site-config";
 import { PageHero } from "@/components/layout/page-hero";
@@ -22,13 +24,12 @@ export function generateStaticParams() {
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
-  const space = SPACE_BY_SLUG[slug];
+  const space = await getPublicVenue(slug);
   if (!space) return {};
-  return {
-    title: `${space.officialName}`,
-    description: space.shortDescription,
+  return pageMetadata(`spaces.${slug}`, {
+    title: space.officialName, description: space.shortDescription,
     openGraph: { images: [{ url: space.heroImage }] },
-  };
+  });
 }
 
 function Fact({ label, value }: { label: string; value: string }) {
@@ -62,7 +63,8 @@ function FeatureList({ title, icon, items }: { title: string; icon: React.ReactN
 
 export default async function SpaceDetailPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const space = SPACE_BY_SLUG[slug];
+  const showVirtualTour = (await siteContent("site.settings"))?.showVirtualTour ?? SHOW_VIRTUAL_TOUR;
+  const space = await getPublicVenue(slug);
   if (!space) notFound();
 
   const combo = COMBO_RULES.find((c) => c.active && (c.comboSlug === slug || c.childSlugs.includes(slug)));
@@ -236,10 +238,10 @@ export default async function SpaceDetailPage({ params }: { params: Promise<{ sl
         </div>
       </section>
 
-      {/* VIDEO + 360 — the 360° column is hidden while SHOW_VIRTUAL_TOUR is false;
+      {/* VIDEO + 360 — the 360° column is hidden while showVirtualTour is false;
           the grid collapses to a single column so no empty gap remains. */}
       <section className="bg-ink text-ivory py-16 md:py-24">
-        <div className={`container-editorial grid gap-10 ${SHOW_VIRTUAL_TOUR ? "lg:grid-cols-2" : ""}`}>
+        <div className={`container-editorial grid gap-10 ${showVirtualTour ? "lg:grid-cols-2" : ""}`}>
           <Reveal>
             <div className="relative aspect-video border border-ivory/10 flex items-center justify-center bg-sand/5">
               <div className="text-center px-6">
@@ -249,7 +251,7 @@ export default async function SpaceDetailPage({ params }: { params: Promise<{ sl
             </div>
             <h3 className="mt-5 text-lg font-normal">Film &amp; Showreel</h3>
           </Reveal>
-          {SHOW_VIRTUAL_TOUR && (
+          {showVirtualTour && (
           <Reveal delay={0.1}>
             <div className="relative aspect-video border border-ivory/10 overflow-hidden">
               {space.scenes360.length > 0 ? (

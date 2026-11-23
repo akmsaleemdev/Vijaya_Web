@@ -1,20 +1,22 @@
+import { pageCopy, pageMetadata } from "@/lib/content";
 import type { Metadata } from "next";
 import { PolicyPage } from "@/components/layout/policy-page";
 
-export const metadata: Metadata = {
+const metadata: Metadata = {
   title: "Cancellation Policy",
   description: "Cancellation terms and refund framework for bookings at VIJAYA International Convention Centre.",
 };
 
-export default function CancellationPolicyPage() {
+export default async function CancellationPolicyPage() {
+  const copy = await pageCopy("cancellation-policy");
   return (
     <PolicyPage
-      eyebrow="Policies"
-      title="Cancellation Policy"
+      eyebrow={copy("eyebrow.policies", "Policies")}
+      title={copy("title.cancellation-policy", "Cancellation Policy")}
       crumb="Cancellation Policy"
       updated="Provisional — pending VICC approval"
-      image="/media/space-pamba.jpg"
-      intro="Life moves. When plans change, this policy keeps the process calm, transparent and fair to both sides."
+      image={copy("image.space-pamba-jpg", "/media/space-pamba.jpg")}
+      intro={copy("intro.life-moves-when-plans-change-this-policy-keeps-the", "Life moves. When plans change, this policy keeps the process calm, transparent and fair to both sides.")}
       sections={[
         {
           heading: "1. How to cancel",
@@ -45,3 +47,5 @@ export default function CancellationPolicyPage() {
     />
   );
 }
+
+export const generateMetadata = () => pageMetadata("cancellation-policy", metadata);

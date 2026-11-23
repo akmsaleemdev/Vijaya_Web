@@ -43,7 +43,7 @@ export function CheckYourDateWizard() {
   const router = useRouter();
   const params = useSearchParams();
 
-  const [step, setStep] = useState(1);
+  const [step, setStep] = useState(() => params.get("eventType") ? (params.get("date") ? 3 : 2) : 1);
   const [eventType, setEventType] = useState<EventCategory | null>(
     (params.get("eventType") as EventCategory) || null
   );
@@ -51,7 +51,7 @@ export function CheckYourDateWizard() {
   const [slot, setSlot] = useState<SlotId>((params.get("slot") as SlotId) || "EVENING");
   const [guests, setGuests] = useState<string>(params.get("guests") || "");
   const [month, setMonth] = useState<string>(new Date().toISOString().slice(0, 7));
-  const [cal, setCal] = useState<Record<string, { free: number; total: number }> | null>(null);
+  const [cal, setCal] = useState<Record<string, { free: number; total: number; sessions?: Record<SlotId, number> }> | null>(null);
   const [results, setResults] = useState<CheckResponse | null>(null);
   const [checking, setChecking] = useState(false);
   const [resultError, setResultError] = useState<string | null>(null);
@@ -60,21 +60,16 @@ export function CheckYourDateWizard() {
   const [holdError, setHoldError] = useState<{ message: string; detail?: string } | null>(null);
   const [venuePreselect] = useState<string | null>(params.get("venue"));
 
-  // Auto-start flow when arriving with query params (from space pages / homepage)
-  useEffect(() => {
-    if (params.get("eventType")) setStep(params.get("date") ? 3 : 2);
-  }, [params]);
-
   // Calendar availability
   useEffect(() => {
     if (step !== 2) return;
     const ctrl = new AbortController();
-    fetch(`/api/availability/calendar?month=${month}&guests=${parseInt(guests, 10) || ""}`, { signal: ctrl.signal })
+    fetch(`/api/availability/calendar?month=${month}&guests=${parseInt(guests, 10) || ""}${venuePreselect ? "&venue=" + encodeURIComponent(venuePreselect) : ""}`, { signal: ctrl.signal })
       .then((r) => r.json())
       .then((d) => setCal(d.days || null))
       .catch(() => setCal(null));
     return () => ctrl.abort();
-  }, [step, month, guests]);
+  }, [step, month, guests, venuePreselect]);
 
   const runCheck = useCallback(async () => {
     setChecking(true);
@@ -107,13 +102,15 @@ export function CheckYourDateWizard() {
     try {
       const res = await fetch("/api/booking/hold", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID() },
         body: JSON.stringify({ spaceSlug, date, slot, guests: parseInt(guests, 10), eventType }),
       });
       const data = await res.json();
       if (!res.ok) {
         if (res.status === 409) {
-          setHoldError({ message: data.message || "This space was just booked.", detail: data.detail });
+          const alternatives = Array.isArray(data.alternatives) ? SLOTS.filter((item) => data.alternatives.includes(item.id)).map((item) => item.label) : [];
+          setHoldError({ message: data.message || "This space was just booked.", detail: alternatives.length ? "Other available sessions: " + alternatives.join(", ") : undefined });
+          await runCheck();
           setResults((r) => r ? { ...r, spaces: r.spaces.map((s) => s.slug === spaceSlug ? { ...s, available: false, status: "TEMPORARY_HOLD" } : s) } : r);
         } else {
           setHoldError({ message: data.error || data.message || "We couldn't create your hold." });
@@ -132,10 +129,13 @@ export function CheckYourDateWizard() {
   // Auto-create the hold when arriving from a space page with auto=1
   useEffect(() => {
     if (venuePreselect && params.get("auto") === "1" && date && step === 3) {
-      createHold(venuePreselect);
+      const timer = setTimeout(() => { void createHold(venuePreselect); }, 0);
+      return () => clearTimeout(timer);
     }
      
   }, [venuePreselect, params, date, step]);
+
+  const unavailable = (session: SlotId) => date && cal?.[date]?.sessions?.[session] === 0;
 
   const progress = useMemo(() => {
     const labels = ["Event", "Date", "Guests", "Results", "Book"];
@@ -270,8 +270,9 @@ export function CheckYourDateWizard() {
                     {SLOTS.map((s) => (
                       <button
                         key={s.id}
+                        disabled={!!unavailable(s.id)}
                         onClick={() => { setSlot(s.id); track("slot_selected", { slot: s.id }); }}
-                        className={`text-left border rounded-sm px-5 py-4 transition-all duration-300 ${
+                        className={`text-left border rounded-sm px-5 py-4 transition-all duration-300 disabled:opacity-45 ${
                           slot === s.id ? "border-burgundy bg-burgundy/5" : "border-border hover:border-burgundy/40"
                         }`}
                         aria-pressed={slot === s.id}
@@ -280,12 +281,12 @@ export function CheckYourDateWizard() {
                           <span className="text-[14px] font-medium">{s.label}</span>
                           {slot === s.id && <Check className="h-4 w-4 text-burgundy" />}
                         </span>
-                        <span className="text-[12px] text-stone">{s.time}</span>
+                        <span className="text-[12px] text-stone">{unavailable(s.id) ? "Unavailable" : s.time}</span>
                       </button>
                     ))}
                   </div>
                   <button
-                    disabled={!date}
+                    disabled={!date || !!unavailable(slot)}
                     onClick={() => setStep(3)}
                     className="btn-primary mt-6 w-full disabled:opacity-40"
                   >
@@ -510,7 +511,7 @@ function nextMonth(month: string, set: (m: string) => void) {
 
 interface CalCell { day: string | null; free: number | null; total: number | null }
 
-function calendarDays(month: string, cal: Record<string, { free: number; total: number }> | null): CalCell[] {
+function calendarDays(month: string, cal: Record<string, { free: number; total: number; sessions?: Record<SlotId, number> }> | null): CalCell[] {
   const [y, m] = month.split("-").map(Number);
   const first = new Date(Date.UTC(y, m - 1, 1));
   const daysInMonth = new Date(Date.UTC(y, m, 0)).getUTCDate();

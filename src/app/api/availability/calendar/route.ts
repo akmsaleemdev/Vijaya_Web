@@ -1,24 +1,15 @@
-import { NextResponse } from "next/server";
+import { z } from "zod";
 import { getMonthAvailability } from "@/lib/availability";
 
-export const dynamic = "force-dynamic";
-
-/**
- * GET /api/availability/calendar?month=YYYY-MM&guests=300
- * Month overview for the date picker: how many spaces are free per day.
- */
+const input = z.object({
+  month: z.string().regex(/^\d{4}-(?:0[1-9]|1[0-2])$/),
+  guests: z.string().regex(/^\d{0,5}$/).optional(),
+  venue: z.string().min(1).max(100).optional(),
+});
 export async function GET(req: Request) {
-  try {
-    const url = new URL(req.url);
-    const month = url.searchParams.get("month");
-    const guests = Number(url.searchParams.get("guests")) || undefined;
-    if (!month || !/^\d{4}-\d{2}$/.test(month)) {
-      return NextResponse.json({ error: "month=YYYY-MM required" }, { status: 400 });
-    }
-    const data = await getMonthAvailability(month, guests);
-    return NextResponse.json({ month, days: data });
-  } catch (e) {
-    console.error("availability/calendar error", e);
-    return NextResponse.json({ error: "Calendar temporarily unavailable." }, { status: 500 });
-  }
+  const parsed = input.safeParse(Object.fromEntries(new URL(req.url).searchParams));
+  if (!parsed.success) return Response.json({ error: "Choose a valid month and guest count." }, { status: 422 });
+  const { month, guests, venue } = parsed.data;
+  const data = await getMonthAvailability(month, Number(guests) || undefined, venue);
+  return Response.json({ month, days: data }, { headers: { "Cache-Control": "no-store" } });
 }

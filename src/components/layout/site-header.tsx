@@ -23,7 +23,9 @@ const DARK_HERO_ROUTES = [
   "/global-desk",
 ];
 
-export function SiteHeader() {
+export function SiteHeader({ navigation = MAIN_NAV, showVirtualTour = SHOW_VIRTUAL_TOUR }: {
+  navigation?: typeof MAIN_NAV; showVirtualTour?: boolean;
+} = {}) {
   const pathname = usePathname();
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -67,7 +69,7 @@ export function SiteHeader() {
           <Logo variant={logoVariant} href="/" size="header" priority />
 
           <nav aria-label="Primary" className="hidden lg:flex items-center gap-7">
-            {MAIN_NAV.map((item) => (
+            {navigation.map((item) => (
               <Link
                 key={item.href}
                 href={item.href}
@@ -109,7 +111,7 @@ export function SiteHeader() {
           >
             <nav aria-label="Mobile" className="container-editorial flex-1 overflow-y-auto">
               <ul className="divide-y divide-ivory/10">
-                {MAIN_NAV.map((item, i) => (
+                {navigation.map((item, i) => (
                   <motion.li
                     key={item.href}
                     initial={{ opacity: 0, y: 18 }}
@@ -125,7 +127,7 @@ export function SiteHeader() {
               </ul>
               <div className="mt-8 grid grid-cols-2 gap-3 text-sm text-ivory/70">
                 <Link href="/gallery" onClick={() => setMenuOpen(false)} className="py-2">Gallery</Link>
-                {SHOW_VIRTUAL_TOUR && (
+                {showVirtualTour && (
                   <Link href="/360-tour" onClick={() => setMenuOpen(false)} className="py-2">360° Tour</Link>
                 )}
                 <Link href="/global-desk" onClick={() => setMenuOpen(false)} className="py-2">Global Desk</Link>

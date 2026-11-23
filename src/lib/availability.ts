@@ -14,10 +14,17 @@
  * pushes confirmed online bookings out via crmSyncBooking().
  */
 
+import { createHash, randomBytes } from "node:crypto";
+import { bookingTransaction } from "@/lib/booking/transaction";
+import { expireHolds, expireIn, heldStatuses, isSlotConflict, matchesRange, physicalSpaces, reserve, slotRange } from "@/lib/booking/state";
+import { priceConfig } from "@/lib/booking/price-config";
+import { indiaDate, intervals } from "@/lib/booking/slots";
+import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
-import { COMBO_RULES, SPACES, SPACE_BY_SLUG } from "@/lib/data/spaces";
+import { COMBO_RULES, SPACE_BY_SLUG } from "@/lib/data/spaces";
 import { BOOKING_CONFIG, type SlotId } from "@/lib/site-config";
-import { quoteFor } from "@/lib/pricing";
+import { siteContent } from "@/lib/content";
+import { inr, quoteFor } from "@/lib/pricing";
 
 export interface SpaceAvailability {
   slug: string;
@@ -31,55 +38,23 @@ export interface SpaceAvailability {
   guestRange: [number, number] | null;
   requiresApproval: boolean;
   note: string | null;
+  indicative: string;
 }
 
-/** Holds that passed their expiry are swept before any availability read. */
-export async function sweepExpiredHolds(): Promise<void> {
-  const now = new Date();
-  const stale = await db.slotState.findMany({
-    where: { status: "TEMPORARY_HOLD", holdExpiresAt: { lt: now } },
-    select: { bookingRef: true },
-  });
-  if (stale.length === 0) return;
-  const refs = Array.from(new Set(stale.map((s) => s.bookingRef).filter(Boolean))) as string[];
-  await db.slotState.deleteMany({
-    where: { status: "TEMPORARY_HOLD", holdExpiresAt: { lt: now } },
-  });
-  for (const ref of refs) {
-    const b = await db.booking.findUnique({ where: { reference: ref } });
-    if (b && (b.status === "HOLD" || b.status === "PENDING_PAYMENT")) {
-      // Payment pending: keep the booking record for audit, but only if a payment is in flight.
-      const inFlight = await db.payment.findFirst({
-        where: { bookingId: b.id, status: { in: ["INITIATED", "PENDING"] } },
-      });
-      const newStatus = inFlight ? b.status : "EXPIRED";
-      await db.booking.update({ where: { reference: ref }, data: { status: newStatus } });
-      await db.auditLog.create({
-        data: { action: "HOLD_EXPIRED", entity: "Booking", entityRef: ref, detailJson: JSON.stringify({ newStatus }) },
-      });
-    }
-  }
-}
+export const sweepExpiredHolds = expireHolds;
+export const involvedSpaces = physicalSpaces;
 
 function comboFor(slug: string) {
-  return COMBO_RULES.find((c) => c.active && c.comboSlug === slug);
+  return COMBO_RULES.find((combo) => combo.active && combo.comboSlug === slug);
 }
 
-function combosContaining(slug: string) {
-  return COMBO_RULES.filter((c) => c.active && c.childSlugs.includes(slug));
-}
-
-/** All child space slugs that must be free (or get blocked) for a given bookable slug. */
-export function involvedSpaces(slug: string): string[] {
-  const combo = comboFor(slug);
-  return combo ? combo.childSlugs : [slug];
-}
-
-async function statusesFor(slugs: string[], date: string, slot: SlotId) {
+async function statusesFor(slugs: string[], date: string, slot: SlotId, venue: string) {
+  const range = await slotRange(db, venue, slot);
+  if (!range) return null;
   const rows = await db.slotState.findMany({
-    where: { spaceId: { in: slugs }, date, slot },
+    where: { spaceId: { in: slugs }, date, status: { not: "CANCELLED" } },
   });
-  return rows;
+  return rows.filter((row) => matchesRange(row, range));
 }
 
 /**
@@ -94,7 +69,12 @@ export async function checkAvailability(opts: {
 }): Promise<{ spaces: SpaceAvailability[]; crmNotice: string | null }> {
   await sweepExpiredHolds();
 
-  const spaces = SPACES.filter((s) => s.availabilityEnabled && s.bookableOnline);
+  const active = await db.space.findMany({ where: { active: true, availabilityEnabled: true, bookableOnline: true } });
+  const spaces = active.flatMap((venue) => {
+    const existing = SPACE_BY_SLUG[venue.id];
+    const bounds: [number, number] | null = venue.capacityMin !== null && venue.capacityMax !== null ? [venue.capacityMin, venue.capacityMax] : null;
+    return [{ slug: venue.id, officialName: venue.name, venueCategory: venue.category, indoorOrOutdoor: venue.setting, guestRange: bounds ?? existing?.guestRange, requiresManualApproval: venue.requiresApproval, pricingJson: venue.pricingJson }];
+  });
   const result: SpaceAvailability[] = [];
 
   for (const s of spaces) {
@@ -102,8 +82,9 @@ export async function checkAvailability(opts: {
       continue; // not compatible with guest count — hidden, not "unavailable"
     }
     const involved = involvedSpaces(s.slug);
-    const rows = await statusesFor(involved, opts.date, opts.slot);
-    const blocking = rows.find((r) => r.status !== "CANCELLED");
+    const rows = await statusesFor(involved, opts.date, opts.slot, s.slug);
+    const quote = quoteFor(s.slug, opts.date, opts.slot, s.pricingJson);
+    const blocking = rows?.find((r) => r.status !== "CANCELLED");
     result.push({
       slug: s.slug,
       name: s.officialName,
@@ -111,11 +92,12 @@ export async function checkAvailability(opts: {
       setting: s.indoorOrOutdoor,
       isCombo: !!comboFor(s.slug),
       childSlugs: involved,
-      available: !blocking,
+      available: rows !== null && !blocking,
       status: blocking ? blocking.status : null,
-      guestRange: s.guestRange,
+      guestRange: s.guestRange ?? null,
       requiresApproval: s.requiresManualApproval,
       note: null,
+      indicative: quote.base > 0 ? `${inr(quote.deposit)} token · ${inr(quote.totalContract)} total` : "Priced on request",
     });
   }
 
@@ -130,25 +112,36 @@ export async function checkAvailability(opts: {
 /** Calendar payload for a month: per-date summary of how many spaces are free. */
 export async function getMonthAvailability(
   month: string, // YYYY-MM
-  guests?: number
-): Promise<Record<string, { free: number; total: number }>> {
+  guests?: number,
+  venueId?: string,
+): Promise<Record<string, { free: number; total: number; sessions: Record<SlotId, number> }>> {
   await sweepExpiredHolds();
-  const spaces = SPACES.filter((s) => s.availabilityEnabled && s.bookableOnline && (!guests || !s.guestRange || (guests >= s.guestRange[0] && guests <= s.guestRange[1])));
+  const spaces = (await db.space.findMany({ where: { active: true, availabilityEnabled: true, bookableOnline: true, id: venueId } }))
+    .filter((s) => !guests || (guests >= (s.capacityMin ?? 0) && guests <= (s.capacityMax ?? Infinity)));
+  const configs = await db.sessionConfig.findMany();
+  const allSlots = ["MORNING", "AFTERNOON", "EVENING", "FULL_DAY"] as const;
   const from = `${month}-01`;
   const to = `${month}-31`;
   const rows = await db.slotState.findMany({
     where: { date: { gte: from, lte: to }, status: { not: "CANCELLED" } },
   });
-  const byDate: Record<string, { free: number; total: number }> = {};
+  const byDate: Record<string, { free: number; total: number; sessions: Record<SlotId, number> }> = {};
   const days = daysInMonth(month);
   for (const d of days) {
-    byDate[d] = { free: 0, total: spaces.length };
+    byDate[d] = { free: 0, total: spaces.length, sessions: { MORNING: 0, AFTERNOON: 0, EVENING: 0, FULL_DAY: 0 } };
   }
   for (const s of spaces) {
-    const involved = involvedSpaces(s.slug);
+    const involved = involvedSpaces(s.id);
+    const sessions = allSlots.map((key) => {
+      const config = configs.find((item) => item.spaceId === s.id && item.key === key);
+      const range = config ? config.enabled ? [config.startMinute, config.endMinute] as const : null : intervals[key];
+      return { key, range };
+    });
     for (const d of days) {
-      const blocked = rows.some((r) => involved.includes(r.spaceId) && r.date === d);
-      if (!blocked) byDate[d].free += 1;
+      const occupied = rows.filter((r) => involved.includes(r.spaceId) && r.date === d);
+      const free = sessions.filter(({ range }) => range && !occupied.some((row) => matchesRange(row, range)));
+      if (free.length) byDate[d].free += 1;
+      for (const session of free) byDate[d].sessions[session.key] += 1;
     }
   }
   return byDate;
@@ -163,267 +156,144 @@ function daysInMonth(month: string): string[] {
 export interface HoldInput {
   spaceSlug: string;
   date: string;
-  slot: SlotId;
+  slot: string;
   guests: number;
   eventType: string;
-  /** Customer details are captured at checkout (step 7) — a hold may be anonymous. */
+  addOns?: string[];
   customer?: { name?: string; phone?: string; email?: string; country?: string; notes?: string };
-  utm?: Record<string, string>;
 }
 
 export type HoldResult =
-  | { ok: true; reference: string; holdExpiresAt: string; spaceName: string; amounts: { base: number; weekendUplift: number; tax: number; deposit: number; totalPayable: number } }
-  | { ok: false; code: "UNAVAILABLE" | "NOT_BOOKABLE" | "INVALID"; message: string; detail?: string };
+  | { ok: true; reference: string; holdExpiresAt: string | null; spaceName: string; amounts: ReturnType<typeof quoteFor> }
+  | { ok: false; code: "SLOT_UNAVAILABLE" | "NOT_BOOKABLE" | "INVALID" | "IDEMPOTENCY_CONFLICT"; message: string };
 
-/**
- * Create an atomic temporary hold + HOLD booking.
- * The unique index on SlotState(spaceId,date,slot) makes concurrent holds for
- * the same space/date/slot impossible — the second write fails inside the
- * transaction and we surface a calm, premium message.
- */
-export async function createTemporaryHold(input: HoldInput): Promise<HoldResult> {
-  const space = SPACE_BY_SLUG[input.spaceSlug];
-  if (!space || !space.availabilityEnabled || !space.bookableOnline) {
-    return { ok: false, code: "NOT_BOOKABLE", message: "This space cannot be booked online. Our events team will gladly arrange it for you." };
-  }
-  if (space.guestRange && (input.guests < space.guestRange[0] || input.guests > space.guestRange[1])) {
-    return { ok: false, code: "INVALID", message: "Expected guest count is outside the indicative range for this space." };
-  }
-
-  const involved = involvedSpaces(space.slug);
-  const expires = new Date(Date.now() + BOOKING_CONFIG.holdMinutes * 60 * 1000);
-  const amounts = quoteFor(space.slug, input.date, input.slot);
+export async function createTemporaryHold(
+  input: HoldInput,
+  options: { key?: string; actorId?: string; ip?: string; confirm?: boolean } = {},
+): Promise<HoldResult> {
+  const requestKey = options.key ? (options.actorId ? `admin:${options.actorId}:` : "web:") + options.key : undefined;
+  const requestHash = createHash("sha256").update(JSON.stringify(input)).digest("hex");
+  const mins = (await siteContent("site.settings", "en"))?.holdMinutes ?? Number(process.env.BOOKING_HOLD_MINUTES ?? 15);
   const reference = generateReference();
-
   try {
-    await db.$transaction(async (tx) => {
-      // Re-validate every involved child space inside the write transaction.
-      const rows = await tx.slotState.findMany({
-        where: { spaceId: { in: involved }, date: input.date, slot: input.slot },
-      });
-      if (rows.some((r) => r.status !== "CANCELLED")) {
-        throw new Error("SLOT_TAKEN");
+    return await bookingTransaction(async (tx) => {
+      await expireIn(tx);
+      const booked = requestKey && await tx.booking.findUnique({ where: { requestKey } });
+      if (booked) {
+        if (booked.requestHash !== requestHash) return { ok: false, code: "IDEMPOTENCY_CONFLICT", message: "Use a new request key for a different booking." };
+        const amounts = { base: booked.baseAmount, weekendUplift: booked.weekendUplift, tax: booked.taxAmount, deposit: booked.depositAmount, totalPayable: booked.totalPayable, totalContract: booked.baseAmount + booked.weekendUplift + booked.taxAmount, balanceDue: booked.baseAmount + booked.weekendUplift + booked.taxAmount - booked.totalPayable };
+        return { ok: true, reference: booked.reference, holdExpiresAt: booked.holdExpiresAt?.toISOString() ?? null, spaceName: booked.spaceName, amounts };
       }
-      // Create the booking shell (HOLD).
-      await tx.booking.create({
-        data: {
-          reference,
-          spaceId: space.slug,
-          spaceName: space.officialName,
-          childSpaceIds: JSON.stringify(involved),
-          eventType: input.eventType,
-          eventDate: input.date,
-          slot: input.slot,
-          guests: input.guests,
-          status: "HOLD",
-          customerName: input.customer?.name || "— (hold placed, details pending)",
-          customerPhone: input.customer?.phone || "",
-          customerEmail: input.customer?.email || "",
-          customerCountry: input.customer?.country || "India",
-          notes: input.customer?.notes || null,
-          baseAmount: amounts.base,
-          weekendUplift: amounts.weekendUplift,
-          taxAmount: amounts.tax,
-          depositAmount: amounts.deposit,
-          totalPayable: amounts.totalPayable,
-          holdExpiresAt: expires,
-        },
-      });
-      // Block every involved child slot atomically.
-      for (const child of involved) {
-        await tx.slotState.create({
-          data: {
-            spaceId: child,
-            date: input.date,
-            slot: input.slot,
-            status: "TEMPORARY_HOLD",
-            source: "ONLINE",
-            holdExpiresAt: expires,
-            bookingRef: reference,
-          },
-        });
+      const space = await tx.space.findUnique({ where: { id: input.spaceSlug } });
+      if (!space?.active || (!options.actorId && (!space.bookableOnline || !space.availabilityEnabled))) {
+        return { ok: false, code: "NOT_BOOKABLE", message: "This space cannot be booked. Please contact our events team." };
       }
-      await tx.auditLog.create({
-        data: { action: "TEMPORARY_HOLD_CREATED", entity: "Booking", entityRef: reference, detailJson: JSON.stringify({ space: space.slug, date: input.date, slot: input.slot }) },
+      if ((space.capacityMin !== null && input.guests < space.capacityMin) || (space.capacityMax !== null && input.guests > space.capacityMax)) {
+        return { ok: false, code: "INVALID", message: "Guest count is outside the permitted range for this space." };
+      }
+      const range = await slotRange(tx, space.id, input.slot);
+      if (!range || input.date < indiaDate()) return { ok: false, code: "INVALID", message: "Choose an active session and a current or future event date." };
+      const addOnNames = [...new Set(input.addOns ?? [])];
+      const priceRules = space.pricingJson ? priceConfig.parse(JSON.parse(space.pricingJson)) : null;
+      const addOns = (priceRules?.addOns ?? []).filter((item) => addOnNames.includes(item.name));
+      if (addOns.length !== addOnNames.length) return { ok: false, code: "INVALID", message: "One or more add-ons are unavailable for this venue." };
+      const extras = addOns.reduce((total, item) => total + item.price, 0);
+      const expires = options.confirm ? undefined : new Date(Date.now() + (Number.isInteger(mins) && mins > 0 && mins <= 1440 ? mins : 15) * 60_000);
+      const bookingRange = await reserve(tx, {
+        spaceSlug: space.id, date: input.date, slot: input.slot, range, bookingRef: reference,
+        status: options.confirm ? "CONFIRMED" : "TEMPORARY_HOLD",
+        source: options.actorId ? "OPS" : "ONLINE", holdExpiresAt: expires,
       });
+      const amounts = quoteFor(space.id, input.date, input.slot, space.pricingJson, extras);
+      const booking = await tx.booking.create({ data: {
+        ...bookingRange, reference, requestKey, requestHash, spaceId: space.id, spaceName: space.name,
+        eventType: input.eventType, eventDate: input.date, slot: input.slot, guests: input.guests,
+        status: options.confirm ? "CONFIRMED" : "HOLD", source: options.actorId ? "ADMIN" : "WEB", createdById: options.actorId,
+        confirmedAt: options.confirm ? new Date() : null, crmSync: options.confirm ? "QUEUED" : "NOT_CONNECTED",
+        customerName: input.customer?.name ?? "— (hold placed, details pending)",
+        customerPhone: input.customer?.phone ?? "", customerEmail: input.customer?.email ?? "",
+        customerCountry: input.customer?.country ?? "India", notes: input.customer?.notes, addons: addOns.length ? JSON.stringify(addOns) : undefined,
+        baseAmount: amounts.base, weekendUplift: amounts.weekendUplift, taxAmount: amounts.tax,
+        depositAmount: amounts.deposit, totalPayable: amounts.totalPayable, holdExpiresAt: expires,
+      } });
+      if (options.confirm) await createPortalDocuments(tx, booking.id, reference, booking.eventDate, false);
+      await tx.auditLog.create({ data: { action: options.confirm ? "BOOKING_CREATED" : "HOLD_CREATED", entity: "Booking", entityRef: reference, actorId: options.actorId, ip: options.ip, afterJson: JSON.stringify({ space: space.id, date: input.date, slot: input.slot }) } });
+      return { ok: true, reference, holdExpiresAt: expires?.toISOString() ?? null, spaceName: space.name, amounts };
     });
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    if (msg.includes("SLOT_TAKEN") || msg.includes("Unique constraint")) {
-      return {
-        ok: false,
-        code: "UNAVAILABLE",
-        message: "This space was just booked by another enquiry.",
-        detail: "The moment a date is confirmed — online or through the VIJAYA booking office — it is blocked here as well. Please choose another slot or space, or contact our team and we will find the closest alternative.",
-      };
-    }
-    throw e;
+  } catch (error) {
+    if (!isSlotConflict(error)) throw error;
+    return { ok: false, code: "SLOT_UNAVAILABLE", message: "That session is unavailable. Choose another time or space." };
   }
-
-  return {
-    ok: true,
-    reference,
-    holdExpiresAt: expires.toISOString(),
-    spaceName: space.officialName,
-    amounts,
-  };
 }
 
-/** Revalidate + move booking to PENDING_PAYMENT at checkout. */
-export async function markPendingPayment(reference: string): Promise<boolean> {
-  const b = await db.booking.findUnique({ where: { reference } });
-  if (!b) return false;
-  if (b.status !== "HOLD") return false;
-  await db.$transaction(async (tx) => {
-    await tx.booking.update({ where: { reference }, data: { status: "PENDING_PAYMENT" } });
-    await tx.slotState.updateMany({
-      where: { bookingRef: reference, status: "TEMPORARY_HOLD" },
-      data: { status: "PENDING_PAYMENT", holdExpiresAt: new Date(Date.now() + 30 * 60 * 1000) },
-    });
-    await tx.auditLog.create({
-      data: { action: "CHECKOUT_STARTED", entity: "Booking", entityRef: reference },
-    });
-  });
+export async function createPortalDocuments(tx: Prisma.TransactionClient, bookingId: string, reference: string, date: string, paid: boolean) {
+  if (await tx.document.count({ where: { bookingId } })) return;
+  const kinds = [
+    ["CONFIRMATION", "Booking Confirmation"],
+    ["INVOICE", "Invoice — " + reference],
+    ["AGREEMENT", "Venue Booking Agreement"],
+    ...(paid ? [["RECEIPT", "Payment Receipt"]] : []),
+  ];
+  await tx.document.createMany({ data: kinds.map(([type, title]) => ({ bookingId, type, title })) });
+  const milestones = [
+    { order: 60, title: "Planning consultation", detail: "Meet your event manager and shape the run of show." },
+    { order: 30, title: "Vendor coordination", detail: "Share your vendor list and timelines with the VIJAYA team." },
+    { order: 15, title: "Layout & finalisation", detail: "Confirm seating layouts, stage plan and AV requirements." },
+    { order: 7, title: "Final walkthrough", detail: "Walk the space with your event manager and sign off the plan." },
+    { order: 0, title: "Your event day", detail: "Welcome to VIJAYA. We will take it from here." },
+  ];
+  await tx.milestone.createMany({ data: milestones.map((milestone) => ({
+    ...milestone, bookingId, dueDate: new Date(Date.parse(date + "T00:00:00Z") - milestone.order * 86400000).toISOString().slice(0, 10),
+  })) });
+}
+
+export async function confirmIn(tx: Prisma.TransactionClient, reference: string, options: { actorId?: string; ip?: string; paymentRef?: string } = {}) {
+  const booking = await tx.booking.findUnique({ where: { reference } });
+  if (!booking) return false;
+  if (booking.status === "CONFIRMED") return true;
+  if (!heldStatuses.includes(booking.status) || !booking.holdExpiresAt || booking.holdExpiresAt <= new Date()) return false;
+  const locks = await tx.slotState.count({ where: { bookingRef: reference, source: { in: ["ONLINE", "OPS"] } } });
+  if (locks !== physicalSpaces(booking.spaceId).length) return false;
+  await tx.booking.update({ where: { id: booking.id }, data: { status: "CONFIRMED", confirmedAt: new Date(), holdExpiresAt: null, crmSync: "QUEUED" } });
+  await tx.slotState.updateMany({ where: { bookingRef: reference, source: { in: ["ONLINE", "OPS"] } }, data: { status: "CONFIRMED", holdExpiresAt: null } });
+  await createPortalDocuments(tx, booking.id, reference, booking.eventDate, !!options.paymentRef);
+  await tx.auditLog.create({ data: { action: "BOOKING_CONFIRMED", entity: "Booking", entityRef: reference, actorId: options.actorId, ip: options.ip, beforeJson: JSON.stringify({ status: booking.status }), afterJson: JSON.stringify({ status: "CONFIRMED", paymentRef: options.paymentRef }) } });
   return true;
 }
 
-/**
- * Confirm after verified payment. Idempotent: confirming twice is a no-op.
- * CRM sync is queued (not silently lost) when the CRM link is not yet live.
- */
-export async function confirmBooking(reference: string, paymentRef: string): Promise<{ ok: boolean; crmSync: string }> {
-  const b = await db.booking.findUnique({ where: { reference } });
-  if (!b) return { ok: false, crmSync: "FAILED" };
-  if (b.status === "CONFIRMED") return { ok: true, crmSync: b.crmSync };
-
-  const involved: string[] = JSON.parse(b.childSpaceIds || `["${b.spaceId}"]`);
-  await db.$transaction(async (tx) => {
-    await tx.booking.update({
-      where: { reference },
-      data: { status: "CONFIRMED", confirmedAt: new Date(), crmSync: BOOKING_CONFIG.crmConnected ? "SYNCED" : "QUEUED" },
-    });
-    await tx.slotState.updateMany({
-      where: { bookingRef: reference },
-      data: { status: "CONFIRMED", holdExpiresAt: null },
-    });
-    await tx.auditLog.create({
-      data: { action: "BOOKING_CONFIRMED", entity: "Booking", entityRef: reference, detailJson: JSON.stringify({ paymentRef }) },
-    });
-  });
-
-  // Seed portal documents + milestones for the post-booking experience.
-  const existingDocs = await db.document.count({ where: { bookingId: b.id } });
-  if (existingDocs === 0) {
-    await db.document.createMany({
-      data: [
-        { bookingId: b.id, type: "CONFIRMATION", title: "Booking Confirmation" },
-        { bookingId: b.id, type: "INVOICE", title: "Invoice — Booking " + reference },
-        { bookingId: b.id, type: "RECEIPT", title: "Payment Receipt" },
-        { bookingId: b.id, type: "AGREEMENT", title: "Venue Booking Agreement" },
-      ],
-    });
-    const eventDate = new Date(b.eventDate + "T00:00:00Z");
-    const ms = (days: number, title: string, detail: string) => {
-      const d = new Date(eventDate.getTime() - days * 86400000);
-      return { bookingId: b.id, title, detail, dueDate: d.toISOString().slice(0, 10), order: days };
-    };
-    await db.milestone.createMany({
-      data: [
-        ms(60, "Planning consultation", "Meet your event manager and shape the run of show."),
-        ms(30, "Vendor coordination", "Share your vendor list and timelines with the VIJAYA team."),
-        ms(15, "Layout & finalisation", "Confirm seating layouts, stage plan and AV requirements."),
-        ms(7, "Final walkthrough", "Walk the space with your event manager and sign off the plan."),
-        ms(0, "Your event day", "Welcome to VIJAYA. We will take it from here."),
-      ],
-    });
-  }
-
-  // Push to CRM when connected; never silently lose the transaction.
-  await crmSyncBooking(reference);
-  return { ok: true, crmSync: BOOKING_CONFIG.crmConnected ? "SYNCED" : "QUEUED" };
+export async function confirmBooking(reference: string, paymentRef: string) {
+  const ok = await bookingTransaction((tx) => confirmIn(tx, reference, { paymentRef }));
+  return { ok, crmSync: ok ? "QUEUED" : "FAILED" };
 }
 
-/** Release a hold / cancelled booking's slots. */
-export async function releaseBookingSlots(reference: string, reason: string): Promise<void> {
-  await db.slotState.deleteMany({ where: { bookingRef: reference } });
-  await db.auditLog.create({
-    data: { action: "SLOTS_RELEASED", entity: "Booking", entityRef: reference, detailJson: JSON.stringify({ reason }) },
-  });
-}
-
-// ---------------------------------------------------------------------------
-// CRM adapter — the concrete integration lands when VICC confirms vendor/API.
-// ---------------------------------------------------------------------------
-
-export async function crmSyncBooking(reference: string): Promise<string> {
-  if (!BOOKING_CONFIG.crmConnected) {
-    // Flagged for operational review — never silently lost.
-    await db.auditLog.create({
-      data: { action: "CRM_SYNC_QUEUED", entity: "Booking", entityRef: reference },
-    });
-    return "QUEUED";
-  }
-  // TODO(CRM): POST booking payload to CRM endpoint, return "SYNCED"/"FAILED".
-  return "SYNCED";
-}
-
-/**
- * Inbound CRM synchronisation — offline bookings, blocks and releases.
- * Called by /api/crm/sync with the shared secret header.
- */
 export async function crmApplySync(payload: {
-  action: "BOOK" | "BLOCK" | "RELEASE";
-  spaceId: string;
-  date: string;
-  slot: string;
-  note?: string;
-  bookingRef?: string;
-  customer?: { name?: string; phone?: string; email?: string };
-  amount?: number;
-}): Promise<{ ok: boolean; message: string }> {
-  const space = SPACE_BY_SLUG[payload.spaceId];
-  if (!space) return { ok: false, message: "Unknown spaceId" };
-
-  if (payload.action === "RELEASE") {
-    await db.slotState.deleteMany({
-      where: { spaceId: payload.spaceId, date: payload.date, slot: payload.slot, source: { in: ["OFFLINE_CRM", "OPS"] } },
+  action: "BOOK" | "BLOCK" | "RELEASE"; spaceId: string; date: string; slot: string; note?: string; bookingRef?: string;
+}) {
+  try {
+    return await bookingTransaction(async (tx) => {
+      await expireIn(tx);
+      const space = await tx.space.findUnique({ where: { id: payload.spaceId } });
+      const range = space && await slotRange(tx, payload.spaceId, payload.slot);
+      if (!range) return { ok: false, message: "Unknown venue or session." };
+      const groupId = `crm:${payload.spaceId}:${payload.date}:${payload.slot}`;
+      const legacy = { source: "OFFLINE_CRM", spaceId: payload.spaceId, date: payload.date, slot: payload.slot, groupId: null };
+      if (payload.action === "RELEASE") {
+        await tx.slotState.deleteMany({ where: { OR: [{ source: "OFFLINE_CRM", groupId }, legacy] } });
+      } else {
+        const status = payload.action === "BOOK" ? "CONFIRMED" : "BLOCKED";
+        const existing = await tx.slotState.findFirst({ where: { OR: [{ source: "OFFLINE_CRM", groupId }, legacy] } });
+        if (existing) return { ok: existing.status === status && existing.bookingRef === (payload.bookingRef ?? null), message: "A CRM reservation already exists for this session." };
+        await reserve(tx, { spaceSlug: payload.spaceId, date: payload.date, slot: payload.slot, range, status, source: "OFFLINE_CRM", groupId, note: payload.note, bookingRef: payload.bookingRef });
+      }
+      await tx.auditLog.create({ data: { action: `CRM_${payload.action}`, entity: "SlotState", entityRef: groupId } });
+      return { ok: true, message: "Availability updated." };
     });
-    return { ok: true, message: "Slot released." };
+  } catch (error) {
+    if (!isSlotConflict(error)) throw error;
+    return { ok: false, message: "The requested session overlaps an existing reservation." };
   }
-
-  const status = payload.action === "BOOK" ? "CONFIRMED" : "BLOCKED";
-  const existing = await db.slotState.findUnique({
-    where: { spaceId_date_slot: { spaceId: payload.spaceId, date: payload.date, slot: payload.slot } },
-  });
-  if (existing && existing.source === "ONLINE" && existing.status !== "CANCELLED") {
-    return { ok: false, message: "Conflict: slot is already held online. Flagged for operations review." };
-  }
-  await db.slotState.upsert({
-    where: { spaceId_date_slot: { spaceId: payload.spaceId, date: payload.date, slot: payload.slot } },
-    create: {
-      spaceId: payload.spaceId,
-      date: payload.date,
-      slot: payload.slot,
-      status,
-      source: "OFFLINE_CRM",
-      bookingRef: payload.bookingRef || null,
-      note: payload.note || null,
-    },
-    update: { status, source: "OFFLINE_CRM", bookingRef: payload.bookingRef || null, note: payload.note || null },
-  });
-  await db.auditLog.create({
-    data: { action: `CRM_${payload.action}`, entity: "SlotState", entityRef: `${payload.spaceId}/${payload.date}/${payload.slot}` },
-  });
-  return { ok: true, message: `Slot ${status}.` };
 }
 
-// ---------------------------------------------------------------------------
-// Reference + quote helpers
-// ---------------------------------------------------------------------------
-
-const REF_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
-export function generateReference(): string {
-  let s = "";
-  for (let i = 0; i < 6; i++) s += REF_ALPHABET[Math.floor(Math.random() * REF_ALPHABET.length)];
-  return `VIJ-${s}`;
+export function generateReference() {
+  return "VIJ-" + randomBytes(10).toString("hex").toUpperCase();
 }

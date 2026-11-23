@@ -1,20 +1,22 @@
+import { pageCopy, pageMetadata } from "@/lib/content";
 import type { Metadata } from "next";
 import { PolicyPage } from "@/components/layout/policy-page";
 
-export const metadata: Metadata = {
+const metadata: Metadata = {
   title: "Terms of Use",
   description: "Terms governing the use of the VIJAYA website and booking platform.",
 };
 
-export default function TermsPage() {
+export default async function TermsPage() {
+  const copy = await pageCopy("terms");
   return (
     <PolicyPage
-      eyebrow="Legal"
-      title="Terms of Use"
+      eyebrow={copy("eyebrow.legal", "Legal")}
+      title={copy("title.terms-of-use", "Terms of Use")}
       crumb="Terms"
       updated="Provisional — pending VICC approval"
-      image="/media/exp-architecture.jpg"
-      intro="The ground rules for using this website and booking platform."
+      image={copy("image.exp-architecture-jpg", "/media/exp-architecture.jpg")}
+      intro={copy("intro.the-ground-rules-for-using-this-website-and-bookin", "The ground rules for using this website and booking platform.")}
       sections={[
         {
           heading: "1. The service",
@@ -51,3 +53,5 @@ export default function TermsPage() {
     />
   );
 }
+
+export const generateMetadata = () => pageMetadata("terms", metadata);

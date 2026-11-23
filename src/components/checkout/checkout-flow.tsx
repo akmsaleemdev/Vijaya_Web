@@ -8,7 +8,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import {
@@ -38,7 +38,7 @@ const EASE = [0.22, 1, 0.36, 1] as const;
 
 export function CheckoutFlow({ reference }: { reference: string }) {
   const router = useRouter();
-  const params = useSearchParams();
+
   const [info, setInfo] = useState<BookingInfo | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [phase, setPhase] = useState<"details" | "payment" | "confirmed" | "expired" | "gone">("details");
@@ -62,19 +62,20 @@ export function CheckoutFlow({ reference }: { reference: string }) {
       setInfo(data);
       if (data.status === "CONFIRMED") setPhase("confirmed");
       else if (data.status === "EXPIRED" || data.status === "CANCELLED") setPhase("expired");
-      else setPhase("details");
+      else setPhase(data.status === "PENDING_PAYMENT" ? "payment" : "details");
     } catch {
       setLoadError("We couldn't reach the booking service. Please refresh to try again.");
     }
   }, [reference]);
 
   useEffect(() => {
-    load();
+    const task = setTimeout(() => { void load(); }, 0);
+    return () => clearTimeout(task);
   }, [load]);
 
   // Hold countdown
   useEffect(() => {
-    if (!info?.holdExpiresAt || phase !== "details") return;
+    if (!info?.holdExpiresAt || !(phase === "details" || phase === "payment")) return;
     const tick = () => {
       const msLeft = new Date(info.holdExpiresAt!).getTime() - Date.now();
       if (msLeft <= 0) {
@@ -86,12 +87,6 @@ export function CheckoutFlow({ reference }: { reference: string }) {
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
   }, [info?.holdExpiresAt, phase]);
-
-  // If payment returned to this page after the gateway, refresh state.
-  useEffect(() => {
-    if (params.get("state") === "confirmed") setPhase("confirmed");
-    if (params.get("state") === "payment") setPhase("payment");
-  }, [params]);
 
   const submitDetails = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -114,7 +109,7 @@ export function CheckoutFlow({ reference }: { reference: string }) {
       });
       const data = await res.json();
       if (!res.ok) {
-        if (res.status === 410) {
+        if (res.status === 410 || data.code === "HOLD_EXPIRED") {
           setPhase("expired");
           return;
         }
@@ -293,6 +288,7 @@ export function CheckoutFlow({ reference }: { reference: string }) {
                     {info.spaceName} · {prettyDate(info.eventDate)} · {slotLabel}. Your hold remains active while you
                     pay. Confirmation is issued only after server-side payment verification.
                   </p>
+                  {info.holdExpiresAt && remaining > 0 && <p className="mt-3 text-sm">Hold expires in {mins}:{String(secs).padStart(2, "0")}</p>}
                   <div className="mt-6 flex items-start gap-3 border border-gold/40 bg-gold/10 p-4 text-[12px] leading-6 text-stone">
                     <ShieldCheck className="h-4 w-4 mt-0.5 shrink-0 text-gold" />
                     <span>

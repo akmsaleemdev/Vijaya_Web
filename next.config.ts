@@ -8,10 +8,7 @@ const nextConfig: NextConfig = {
     formats: ["image/avif", "image/webp"],
     qualities: [75, 92, 95],
   },
-  /* config options here */
-  typescript: {
-    ignoreBuildErrors: true,
-  },
+  experimental: { authInterrupts: true },
   reactStrictMode: false,
   async redirects() {
     return [
@@ -26,7 +23,17 @@ const nextConfig: NextConfig = {
     ];
   },
   async headers() {
+    const adminHeaders = [
+      { key: "X-Frame-Options", value: "DENY" },
+      { key: "X-Robots-Tag", value: "noindex, nofollow" },
+      { key: "X-Content-Type-Options", value: "nosniff" },
+      { key: "Referrer-Policy", value: "same-origin" },
+      { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), payment=()" },
+      { key: "Content-Security-Policy", value: "default-src 'self'; script-src 'self' 'unsafe-inline'" + (process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : "") + "; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; media-src 'self' blob:; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'; object-src 'none'" },
+    ];
     return [
+      { source: "/admin/:path*", headers: adminHeaders },
+      { source: "/api/admin/:path*", headers: adminHeaders },
       {
         // Hashed build assets (JS/CSS chunks, optimized next/image output) —
         // filenames include a content hash, so they are safe to cache

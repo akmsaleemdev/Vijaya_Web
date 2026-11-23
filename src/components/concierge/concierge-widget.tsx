@@ -36,7 +36,9 @@ export function ConciergeWidget() {
   // Hidden inside checkout & portal for focus.
   useEffect(() => {
     const hide = window.location.pathname.startsWith("/book/") || window.location.pathname.startsWith("/my-vijaya");
-    setOpen((o) => (hide ? false : o));
+    if (!hide) return;
+    const task = setTimeout(() => setOpen(false), 0);
+    return () => clearTimeout(task);
   }, [pathname]);
 
   useEffect(() => {

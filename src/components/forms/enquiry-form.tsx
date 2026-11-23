@@ -38,7 +38,9 @@ export function EnquiryForm({ variant }: { variant: Variant }) {
   useEffect(() => {
     const v = params.get("venue");
     const et = params.get("eventType");
-    if (v || et) setF((p) => ({ ...p, venueInterest: v || p.venueInterest, eventType: (et as EventCategory) || p.eventType }));
+    if (!v && !et) return;
+    const task = setTimeout(() => setF((p) => ({ ...p, venueInterest: v || p.venueInterest, eventType: (et as EventCategory) || p.eventType })), 0);
+    return () => clearTimeout(task);
   }, [params]);
 
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>

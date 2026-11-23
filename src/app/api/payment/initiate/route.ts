@@ -1,65 +1,29 @@
-import { NextResponse } from "next/server";
-import crypto from "crypto";
-import { db } from "@/lib/db";
+import { randomUUID } from "node:crypto";
+import { z } from "zod";
+import { bookingTransaction } from "@/lib/booking/transaction";
 
-export const dynamic = "force-dynamic";
-
-/**
- * POST /api/payment/initiate
- * Creates a payment intent at the (sandbox) gateway. The real gateway is
- * TO BE CONFIRMED with VICC — this route is structured so only the
- * provider adapter changes when the production gateway lands.
- *
- * Body: { reference, method? }
- * Returns: { providerRef, amount, checkoutUrl }
- */
+const input = z.object({ reference: z.string().min(1).max(80).toUpperCase(), method: z.string().max(40).optional() });
 export async function POST(req: Request) {
-  try {
-    const { reference, method } = await req.json();
-    if (!reference) return NextResponse.json({ error: "reference required" }, { status: 400 });
-
-    const booking = await db.booking.findUnique({ where: { reference: String(reference).toUpperCase() } });
-    if (!booking) return NextResponse.json({ error: "Booking not found." }, { status: 404 });
-    if (booking.status === "CONFIRMED") {
-      return NextResponse.json({ error: "This booking is already confirmed.", alreadyConfirmed: true }, { status: 409 });
+  if (process.env.ENABLE_SANDBOX_PAYMENTS !== "true") return Response.json({ error: "Online payment is currently unavailable. Contact the VIJAYA team." }, { status: 403 });
+  const parsed = input.safeParse(await req.json().catch(() => null));
+  const key = req.headers.get("Idempotency-Key");
+  if (!parsed.success || (key && key.length > 128)) return Response.json({ error: "Invalid payment request." }, { status: 422 });
+  const { reference, method } = parsed.data;
+  return bookingTransaction(async (tx) => {
+    const booking = await tx.booking.findUnique({ where: { reference } });
+    if (!booking) return Response.json({ error: "Booking not found." }, { status: 404 });
+    if (booking.status === "CONFIRMED") return Response.json({ error: "This booking is already confirmed.", alreadyConfirmed: true }, { status: 409 });
+    if (booking.status !== "PENDING_PAYMENT" || !booking.holdExpiresAt || booking.holdExpiresAt <= new Date()) {
+      return Response.json({ error: "The booking has no active checkout." }, { status: 409 });
     }
-    if (booking.status !== "PENDING_PAYMENT" && booking.status !== "HOLD") {
-      return NextResponse.json({ error: "This booking cannot accept a payment right now.", code: booking.status }, { status: 409 });
-    }
-
-    const idempotencyKey = `init-${booking.reference}-${booking.eventDate}-${booking.slot}`;
-    const existing = await db.payment.findUnique({ where: { idempotencyKey } });
-    if (existing && existing.status !== "FAILED") {
-      return NextResponse.json({
-        providerRef: existing.providerRef,
-        amount: existing.amount,
-        checkoutUrl: `/book/sandbox-gateway?ref=${booking.reference}&pay=${existing.providerRef}`,
-      });
-    }
-
-    const providerRef = `SBX-${crypto.randomBytes(6).toString("hex").toUpperCase()}`;
-    await db.payment.create({
-      data: {
-        bookingId: booking.id,
-        provider: "SANDBOX",
-        providerRef,
-        idempotencyKey,
-        amount: booking.totalPayable,
-        status: "INITIATED",
-        method: method || null,
-      },
-    });
-    await db.auditLog.create({
-      data: { action: "PAYMENT_INITIATED", entity: "Payment", entityRef: providerRef, detailJson: JSON.stringify({ booking: booking.reference, amount: booking.totalPayable }) },
-    });
-
-    return NextResponse.json({
-      providerRef,
-      amount: booking.totalPayable,
-      checkoutUrl: `/book/sandbox-gateway?ref=${booking.reference}&pay=${providerRef}`,
-    });
-  } catch (e) {
-    console.error("payment/initiate error", e);
-    return NextResponse.json({ error: "Payment initiation failed. Please try again." }, { status: 500 });
-  }
+    const idempotencyKey = key ? `sandbox:${booking.id}:${key}` : null;
+    const existing = (idempotencyKey ? await tx.payment.findUnique({ where: { idempotencyKey } }) : null)
+      ?? await tx.payment.findFirst({ where: { bookingId: booking.id, provider: "SANDBOX", status: { in: ["INITIATED", "PENDING"] } } });
+    const payment = existing ?? await tx.payment.create({ data: {
+      bookingId: booking.id, provider: "SANDBOX", providerRef: `SBX-${randomUUID()}`,
+      idempotencyKey: idempotencyKey ?? randomUUID(), amount: booking.totalPayable, status: "INITIATED", method,
+    } });
+    if (!existing) await tx.auditLog.create({ data: { action: "PAYMENT_INITIATED", entity: "Payment", entityRef: payment.providerRef } });
+    return Response.json({ providerRef: payment.providerRef, amount: payment.amount, checkoutUrl: `/book/sandbox-gateway?ref=${reference}&pay=${payment.providerRef}` });
+  });
 }

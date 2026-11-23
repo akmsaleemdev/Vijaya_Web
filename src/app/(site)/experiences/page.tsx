@@ -1,3 +1,4 @@
+import { pageCopy, pageMetadata, siteContent } from "@/lib/content";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Maximize } from "lucide-react";
@@ -7,28 +8,30 @@ import { Reveal, MaskReveal, Parallax } from "@/components/motion/reveal";
 import { Media } from "@/components/media/media";
 import { SHOW_VIRTUAL_TOUR } from "@/lib/site-config";
 
-export const metadata: Metadata = {
+const metadata: Metadata = {
   title: "Experiences",
   description:
     "Architecture, arrival, landscape, the lake, VIP experience and hospitality — explore the VIJAYA destination beyond the halls.",
 };
 
-export default function ExperiencesPage() {
+export default async function ExperiencesPage() {
+  const showVirtualTour = (await siteContent("site.settings"))?.showVirtualTour ?? SHOW_VIRTUAL_TOUR;
+  const copy = await pageCopy("experiences");
   return (
     <main>
       <PageHero
-        eyebrow="The Destination"
-        title="Beyond the Halls, a World Composed."
-        intro="Architecture and landscape, arrival and farewell, water and light — VIJAYA is designed as one continuous experience."
-        image="/media/Destinations Section_Hero Image1-VICC.webp"
+        eyebrow={copy("eyebrow.the-destination", "The Destination")}
+        title={copy("title.beyond-the-halls-a-world-composed", "Beyond the Halls, a World Composed.")}
+        intro={copy("intro.architecture-and-landscape-arrival-and-farewell-wa", "Architecture and landscape, arrival and farewell, water and light — VIJAYA is designed as one continuous experience.")}
+        image={copy("image.destinations-section-hero-image1-vicc-webp", "/media/Destinations Section_Hero Image1-VICC.webp")}
         imageAlt="The VIJAYA International Convention Centre destination at a glance"
         overlayClassName="bg-gradient-to-r from-ink/85 via-ink/45 to-transparent"
         quality={95}
         tag={false}
-        ctas={SHOW_VIRTUAL_TOUR ? [{ label: "Enter 360° Experience", href: "/360-tour" }] : []}
+        ctas={showVirtualTour ? [{ label: "Enter 360° Experience", href: "/360-tour" }] : []}
       />
 
-      <section className="py-16 md:py-24" aria-label="Destination experiences">
+      <section className="py-16 md:py-24" aria-label={copy("aria-label.destination-experiences", "Destination experiences")}>
         <div className="container-editorial">
           {EXPERIENCES.map((b, i) => {
             const flipped = i % 2 === 1;
@@ -42,10 +45,7 @@ export default function ExperiencesPage() {
                   <h2 className="h-section mt-3">{b.title}</h2>
                   <p className="lede mt-4 max-w-lg">{b.text}</p>
                   {b.helipad && (
-                    <p className="mt-5 border-l-2 border-gold pl-4 text-[13px] leading-7 text-stone">
-                      Operated strictly under DGCA regulations and event-day clearance. Never confirmed online — always
-                      arranged with VIJAYA operations.
-                    </p>
+                    <p className="mt-5 border-l-2 border-gold pl-4 text-[13px] leading-7 text-stone">{copy("text.operated-strictly-under-dgca-regulations-and-event", "Operated strictly under DGCA regulations and event-day clearance. Never confirmed online — always arranged with VIJAYA operations.")}</p>
                   )}
                 </Reveal>
               </article>
@@ -54,23 +54,21 @@ export default function ExperiencesPage() {
         </div>
       </section>
 
-      {/* 360° experience section — hidden while SHOW_VIRTUAL_TOUR is false.
+      {/* 360° experience section — hidden while showVirtualTour is false.
           Retained internally for re-enabling later via src/lib/site-config.ts. */}
-      {SHOW_VIRTUAL_TOUR && (
+      {showVirtualTour && (
       <section className="bg-ink text-ivory py-20 md:py-28">
         <div className="container-editorial grid gap-12 lg:grid-cols-2 lg:items-center">
           <Reveal>
-            <p className="eyebrow">Immersive</p>
-            <h2 className="h-display mt-4">Explore the Property in 360°.</h2>
-            <p className="lede !text-ivory/70 mt-5">
-              Drag to look around, zoom into details and jump between spaces — from the grand hall to the lake deck.
-            </p>
+            <p className="eyebrow">{copy("text.immersive", "Immersive")}</p>
+            <h2 className="h-display mt-4">{copy("text.explore-the-property-in-360", "Explore the Property in 360°.")}</h2>
+            <p className="lede !text-ivory/70 mt-5">{copy("text.drag-to-look-around-zoom-into-details-and-jump-bet", "Drag to look around, zoom into details and jump between spaces — from the grand hall to the lake deck.")}</p>
             <div className="mt-8">
-              <Link href="/360-tour" className="btn-gold"><Maximize className="h-4 w-4" /><span>Enter 360° Experience</span></Link>
+              <Link href="/360-tour" className="btn-gold"><Maximize className="h-4 w-4" /><span>{copy("text.enter-360-experience", "Enter 360° Experience")}</span></Link>
             </div>
           </Reveal>
           <MaskReveal className="relative aspect-video">
-            <Media src="/media/pano-hall.jpg" alt="360 panorama preview — placeholder" sizes="50vw" tag={false} />
+            <Media src={copy("src.pano-hall-jpg", "/media/pano-hall.jpg")} alt={copy("alt.360-panorama-preview-placeholder", "360 panorama preview — placeholder")} sizes="50vw" tag={false} />
           </MaskReveal>
         </div>
       </section>
@@ -78,3 +76,5 @@ export default function ExperiencesPage() {
     </main>
   );
 }
+
+export const generateMetadata = () => pageMetadata("experiences", metadata);

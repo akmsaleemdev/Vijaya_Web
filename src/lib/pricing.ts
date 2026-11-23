@@ -3,6 +3,7 @@
  * Every rule here is provisional and clearly surfaced as "indicative" in the UI.
  */
 
+import { priceConfig } from "./booking/price-config";
 import { SPACE_BY_SLUG } from "@/lib/data/spaces";
 import { BOOKING_CONFIG, type SlotId } from "@/lib/site-config";
 
@@ -17,21 +18,24 @@ export interface Quote {
 }
 
 export function isWeekend(dateISO: string): boolean {
-  const d = new Date(dateISO + "T00:00:00");
+  const d = new Date(dateISO + "T00:00:00Z");
   const day = d.getUTCDay();
   return day === 5 || day === 6 || day === 0; // Fri–Sun (SAMPLE rule)
 }
 
-export function quoteFor(spaceSlug: string, dateISO: string, slot: SlotId): Quote {
+export function quoteFor(spaceSlug: string, dateISO: string, slot: string, raw?: string | null, extras = 0): Quote {
   const space = SPACE_BY_SLUG[spaceSlug];
-  const base = space?.pricing?.[slot] ?? space?.pricing?.fullDay ?? 0;
-  const weekendUplift = isWeekend(dateISO) ? Math.round(base * 0.1) : 0;
+  const rules = raw ? priceConfig.parse(JSON.parse(raw)) : undefined;
+  const seasonal = rules?.seasonal?.find(({ from, to }) => dateISO >= from && dateISO <= to)?.multiplier ?? 1;
+  const base = Math.round((rules?.base?.[slot] ?? space?.pricing?.[slot as SlotId] ?? space?.pricing?.fullDay ?? 0) * seasonal) + extras;
+  const weekendUplift = isWeekend(dateISO) ? Math.round(base * (rules?.weekend ?? 0.1)) : 0;
   const subtotal = base + weekendUplift;
-  const tax = Math.round(subtotal * BOOKING_CONFIG.taxRateSample);
+  const taxRate = rules?.tax ?? BOOKING_CONFIG.taxRateSample;
+  const tax = Math.round(subtotal * taxRate);
   const totalContract = subtotal + tax;
-  const deposit = Math.round(subtotal * BOOKING_CONFIG.tokenShare);
-  const totalPayable = deposit + Math.round(deposit * BOOKING_CONFIG.taxRateSample);
-  const balanceDue = totalContract - deposit;
+  const deposit = Math.round(subtotal * (rules?.advance ?? BOOKING_CONFIG.tokenShare));
+  const totalPayable = deposit + Math.round(deposit * taxRate);
+  const balanceDue = totalContract - totalPayable;
   return { base, weekendUplift, tax, deposit, totalPayable, balanceDue, totalContract };
 }
 

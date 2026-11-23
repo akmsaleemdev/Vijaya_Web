@@ -1,3 +1,4 @@
+import { pageCopy, pageMetadata, siteContent } from "@/lib/content";
 import type { Metadata } from "next";
 import { Globe2, MonitorPlay, FileCheck2, CreditCard, CalendarCheck, Video, Users, Handshake, Video as VideoIcon, FileText } from "lucide-react";
 import { PageHero } from "@/components/layout/page-hero";
@@ -6,7 +7,7 @@ import { Media } from "@/components/media/media";
 import { GlobalDeskForm } from "@/components/forms/global-desk-form";
 import { SHOW_VIRTUAL_TOUR } from "@/lib/site-config";
 
-export const metadata: Metadata = {
+const metadata: Metadata = {
   title: "VIJAYA Global Desk",
   description: SHOW_VIRTUAL_TOUR
     ? "Plan from abroad, celebrate in Kerala. Remote date checking, virtual consultations, 360° tours, digital documentation and online payment for NRI families across the GCC."
@@ -27,14 +28,16 @@ const FEATURES = [
   { icon: Handshake, title: "Vendor Coordination", copy: "Florists, photographers and caterers — aligned with the venue." },
 ].filter((f) => SHOW_VIRTUAL_TOUR || f.title !== "360° Venue Tour");
 
-export default function GlobalDeskPage() {
+export default async function GlobalDeskPage() {
+  const showVirtualTour = (await siteContent("site.settings"))?.showVirtualTour ?? SHOW_VIRTUAL_TOUR;
+  const copy = await pageCopy("global-desk");
   return (
     <main>
       <PageHero
-        eyebrow="VIJAYA Global Desk"
-        title="Plan From Abroad. Celebrate in Kerala."
-        intro="A dedicated desk for NRI families across the GCC — every step of planning possible remotely, with the warmth of a homecoming when you arrive."
-        image="/media/story-1.jpg"
+        eyebrow={copy("eyebrow.vijaya-global-desk", "VIJAYA Global Desk")}
+        title={copy("title.plan-from-abroad-celebrate-in-kerala", "Plan From Abroad. Celebrate in Kerala.")}
+        intro={copy("intro.a-dedicated-desk-for-nri-families-across-the-gcc-e", "A dedicated desk for NRI families across the GCC — every step of planning possible remotely, with the warmth of a homecoming when you arrive.")}
+        image={copy("image.story-1-jpg", "/media/story-1.jpg")}
         ctas={[
           { label: "Check Your Date", href: "/check-your-date" },
           { label: "Schedule Virtual Consultation", href: "#consult", variant: "ghost" },
@@ -44,15 +47,15 @@ export default function GlobalDeskPage() {
       <section className="py-20 md:py-28">
         <div className="container-editorial">
           <Reveal>
-            <p className="eyebrow-dark">Where Our Families Are</p>
-            <h2 className="h-section mt-3">Serving the GCC Corridor</h2>
+            <p className="eyebrow-dark">{copy("text.where-our-families-are", "Where Our Families Are")}</p>
+            <h2 className="h-section mt-3">{copy("text.serving-the-gcc-corridor", "Serving the GCC Corridor")}</h2>
           </Reveal>
           <div className="mt-10 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-px bg-border border border-border">
             {MARKETS.map((m, i) => (
               <Reveal key={m} delay={i * 0.04} className="bg-ivory">
                 <div className="py-8 text-center">
                   <p className="text-[15px] font-medium">{m}</p>
-                  <p className="mt-1 text-[11px] uppercase tracking-[0.18em] text-gold">Desk active</p>
+                  <p className="mt-1 text-[11px] uppercase tracking-[0.18em] text-gold">{copy("text.desk-active", "Desk active")}</p>
                 </div>
               </Reveal>
             ))}
@@ -75,11 +78,11 @@ export default function GlobalDeskPage() {
       <section className="bg-burgundy text-ivory py-20 md:py-28">
         <div className="container-editorial grid gap-12 lg:grid-cols-2 lg:items-center">
           <Reveal>
-            <p className="eyebrow">The Journey</p>
-            <h2 className="h-section mt-3">From Dubai to Thiruvalla, Without the Stress.</h2>
+            <p className="eyebrow">{copy("text.the-journey", "The Journey")}</p>
+            <h2 className="h-section mt-3">{copy("text.from-dubai-to-thiruvalla-without-the-stress", "From Dubai to Thiruvalla, Without the Stress.")}</h2>
             <ol className="mt-8 space-y-5">
               {[
-                SHOW_VIRTUAL_TOUR ? "Tour the destination in 360° and shortlist your spaces." : "Shortlist your spaces and the halls that fit your occasion.",
+                showVirtualTour ? "Tour the destination in 360° and shortlist your spaces." : "Shortlist your spaces and the halls that fit your occasion.",
                 "Check your date live and place a temporary hold.",
                 "Meet the events team on a video consultation.",
                 "Confirm with secure online payment and instant documentation.",
@@ -94,7 +97,7 @@ export default function GlobalDeskPage() {
             </ol>
           </Reveal>
           <MaskReveal className="relative aspect-[4/5]">
-            <Media src="/media/hero-wedding.jpg" alt="Kerala wedding setting — placeholder visual" sizes="(max-width: 1024px) 100vw, 50vw" />
+            <Media src={copy("src.hero-wedding-jpg", "/media/hero-wedding.jpg")} alt={copy("alt.kerala-wedding-setting-placeholder-visual", "Kerala wedding setting — placeholder visual")} sizes="(max-width: 1024px) 100vw, 50vw" />
           </MaskReveal>
         </div>
       </section>
@@ -102,9 +105,9 @@ export default function GlobalDeskPage() {
       <section id="consult" className="py-20 md:py-28 scroll-mt-20">
         <div className="container-editorial max-w-3xl">
           <Reveal>
-            <p className="eyebrow-dark">Global Desk Enquiry</p>
-            <h2 className="h-section mt-3">Schedule a Virtual Consultation</h2>
-            <p className="lede mt-4">Tell us where you are and what you're planning — the Global Desk responds within one working day.</p>
+            <p className="eyebrow-dark">{copy("text.global-desk-enquiry", "Global Desk Enquiry")}</p>
+            <h2 className="h-section mt-3">{copy("text.schedule-a-virtual-consultation", "Schedule a Virtual Consultation")}</h2>
+            <p className="lede mt-4">{copy("text.tell-us-where-you-are-and-what-you-re-planning-the", "Tell us where you are and what you're planning — the Global Desk responds within one working day.")}</p>
           </Reveal>
           <Reveal delay={0.1} className="mt-10">
             <GlobalDeskForm />
@@ -114,3 +117,5 @@ export default function GlobalDeskPage() {
     </main>
   );
 }
+
+export const generateMetadata = () => pageMetadata("global-desk", metadata);

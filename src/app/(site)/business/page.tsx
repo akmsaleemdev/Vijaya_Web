@@ -1,3 +1,4 @@
+import { pageCopy, pageMetadata } from "@/lib/content";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight, Download, MapPin, Users } from "lucide-react";
@@ -7,7 +8,7 @@ import { Media } from "@/components/media/media";
 import { VenueCard } from "@/components/booking/venue-card";
 import { SPACES } from "@/lib/data/spaces";
 
-export const metadata: Metadata = {
+const metadata: Metadata = {
   title: "Business & MICE",
   description:
     "Conferences, exhibitions, product launches and leadership events at VIJAYA International Convention Centre, Thiruvalla, Kerala — with AV-ready halls, parking and floor plans.",
@@ -24,16 +25,17 @@ const FORMATS = [
   { title: "Leadership Events", copy: "Discreet offsites with executive dining and lounge access." },
 ];
 
-export default function BusinessPage() {
+export default async function BusinessPage() {
+  const copy = await pageCopy("business");
   const spaces = BIZ_SPACES.map((s) => SPACES.find((x) => x.slug === s)!).filter(Boolean);
 
   return (
     <main>
       <PageHero
-        eyebrow="Business & MICE"
-        title="Business Events, Run With Operational Precision."
-        intro="Conferences, exhibitions, launches and leadership gatherings — clear capacities, AV readiness, parking and access planned as carefully as the programme."
-        image="/media/Hero Image-Business Page-Vijaya-VICC.webp"
+        eyebrow={copy("eyebrow.business-mice", "Business & MICE")}
+        title={copy("title.business-events-run-with-operational-precision", "Business Events, Run With Operational Precision.")}
+        intro={copy("intro.conferences-exhibitions-launches-and-leadership-ga", "Conferences, exhibitions, launches and leadership gatherings — clear capacities, AV readiness, parking and access planned as carefully as the programme.")}
+        image={copy("image.hero-image-business-page-vijaya-vicc-webp", "/media/Hero Image-Business Page-Vijaya-VICC.webp")}
         imageAlt="VIJAYA International Convention Centre business conference room"
         overlayClassName="bg-gradient-to-r from-ink/85 via-ink/45 to-transparent"
         quality={95}
@@ -48,8 +50,8 @@ export default function BusinessPage() {
       <section className="py-20 md:py-28">
         <div className="container-editorial">
           <Reveal>
-            <p className="eyebrow-dark">Formats</p>
-            <h2 className="h-section mt-3 max-w-2xl">Every Business Format, One Address</h2>
+            <p className="eyebrow-dark">{copy("text.formats", "Formats")}</p>
+            <h2 className="h-section mt-3 max-w-2xl">{copy("text.every-business-format-one-address", "Every Business Format, One Address")}</h2>
           </Reveal>
           <div className="mt-12 grid gap-px bg-border sm:grid-cols-2 lg:grid-cols-3 border border-border">
             {FORMATS.map((f, i) => (
@@ -69,9 +71,9 @@ export default function BusinessPage() {
       <section className="bg-ivory-deep py-20 md:py-28">
         <div className="container-editorial">
           <Reveal>
-            <p className="eyebrow-dark">Corporate Spaces</p>
-            <h2 className="h-section mt-3">Halls &amp; Rooms for Business</h2>
-            <p className="text-[12px] text-stone mt-3">Capacities shown are indicative pending verified master data.</p>
+            <p className="eyebrow-dark">{copy("text.corporate-spaces", "Corporate Spaces")}</p>
+            <h2 className="h-section mt-3">{copy("text.halls-rooms-for-business", "Halls & Rooms for Business")}</h2>
+            <p className="text-[12px] text-stone mt-3">{copy("text.capacities-shown-are-indicative-pending-verified-m", "Capacities shown are indicative pending verified master data.")}</p>
           </Reveal>
           <div className="mt-12 grid gap-x-6 gap-y-12 md:grid-cols-2 lg:grid-cols-3">
             {spaces.map((s, i) => (
@@ -85,22 +87,19 @@ export default function BusinessPage() {
       <section className="py-20 md:py-28">
         <div className="container-editorial grid gap-12 lg:grid-cols-2 lg:items-start">
           <Reveal>
-            <p className="eyebrow-dark">Capacity Configurations</p>
-            <h2 className="h-section mt-3">Layouts That Match the Agenda</h2>
-            <p className="lede mt-4">
-              Exact verified capacities are being finalised by VICC management. The table below shows the layouts each
-              hall supports — numbers are published once approved.
-            </p>
+            <p className="eyebrow-dark">{copy("text.capacity-configurations", "Capacity Configurations")}</p>
+            <h2 className="h-section mt-3">{copy("text.layouts-that-match-the-agenda", "Layouts That Match the Agenda")}</h2>
+            <p className="lede mt-4">{copy("text.exact-verified-capacities-are-being-finalised-by-v", "Exact verified capacities are being finalised by VICC management. The table below shows the layouts each hall supports — numbers are published once approved.")}</p>
           </Reveal>
           <Reveal delay={0.1}>
             <div className="overflow-x-auto card-editorial">
               <table className="w-full text-sm">
-                <caption className="sr-only">Layout support by space</caption>
+                <caption className="sr-only">{copy("text.layout-support-by-space", "Layout support by space")}</caption>
                 <thead>
                   <tr className="hairline-b text-left">
-                    <th className="px-5 py-4 font-medium">Space</th>
-                    <th className="px-5 py-4 font-medium">Layouts supported</th>
-                    <th className="px-5 py-4 font-medium">Capacity</th>
+                    <th className="px-5 py-4 font-medium">{copy("text.space", "Space")}</th>
+                    <th className="px-5 py-4 font-medium">{copy("text.layouts-supported", "Layouts supported")}</th>
+                    <th className="px-5 py-4 font-medium">{copy("text.capacity", "Capacity")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -156,19 +155,15 @@ export default function BusinessPage() {
       <section className="py-20 md:py-28">
         <div className="container-editorial grid gap-12 lg:grid-cols-2 lg:items-center">
           <Reveal>
-            <p className="eyebrow-dark">Floor Plans</p>
-            <h2 className="h-section mt-3">Plan Your Layout Before Load-In</h2>
-            <p className="lede mt-4">
-              Verified floor plans and dimensional drawings are being surveyed and will be published per hall. In the
-              meantime, our events team will share the current plan for your dates at quotation.
-            </p>
+            <p className="eyebrow-dark">{copy("text.floor-plans", "Floor Plans")}</p>
+            <h2 className="h-section mt-3">{copy("text.plan-your-layout-before-load-in", "Plan Your Layout Before Load-In")}</h2>
+            <p className="lede mt-4">{copy("text.verified-floor-plans-and-dimensional-drawings-are", "Verified floor plans and dimensional drawings are being surveyed and will be published per hall. In the meantime, our events team will share the current plan for your dates at quotation.")}</p>
             <div className="mt-8 flex flex-wrap gap-4">
-              <Link href="/plan-your-event?eventType=BUSINESS" className="btn-primary"><span>Request a Quote</span></Link>
-              <Link href="/spaces" className="btn-outline"><span>Explore Spaces</span><ArrowRight className="h-4 w-4" /></Link>
+              <Link href="/plan-your-event?eventType=BUSINESS" className="btn-primary"><span>{copy("text.request-a-quote", "Request a Quote")}</span></Link>
+              <Link href="/spaces" className="btn-outline"><span>{copy("text.explore-spaces", "Explore Spaces")}</span><ArrowRight className="h-4 w-4" /></Link>
             </div>
             <p className="mt-5 flex items-center gap-2 text-[12px] text-stone">
-              <MapPin className="h-3.5 w-3.5" /> Thiruvalla, Pathanamthitta — convenient to Kottayam and the GCC corridor towns.
-            </p>
+              <MapPin className="h-3.5 w-3.5" />{copy("text.thiruvalla-pathanamthitta-convenient-to-kottayam-a", " Thiruvalla, Pathanamthitta — convenient to Kottayam and the GCC corridor towns.")}</p>
           </Reveal>
           <MaskRevealWrapper />
         </div>
@@ -193,3 +188,5 @@ function MaskRevealWrapper() {
     </Reveal>
   );
 }
+
+export const generateMetadata = () => pageMetadata("business", metadata);

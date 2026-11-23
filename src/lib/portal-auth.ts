@@ -11,7 +11,9 @@ const COOKIE = "vijaya_portal";
 const MAX_AGE = 60 * 60 * 24 * 7; // 7 days
 
 function secret(): string {
-  return process.env.AUTH_SECRET || "vijaya-dev-secret-change-me";
+  const value = process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET;
+  if (!value) throw new Error("Configure AUTH_SECRET for portal sessions.");
+  return value;
 }
 
 function sign(payload: string): string {
@@ -72,7 +74,7 @@ export async function clearPortalCookie() {
 export async function getPortalSession(): Promise<PortalSession | null> {
   const store = await cookies();
   const token = store.get(COOKIE)?.value;
-  if (!token) return null;
+  if (!token || !(process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET)) return null;
   return verifySessionToken(token);
 }
 

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports -- standalone CommonJS report generator */
 // VIJAYA Website Performance Optimization — Before/After Report (docx)
 // Cover: R1 (Pure Paragraph Left) + IG-1 (Ink Gold) palette — aligns with
 // VIJAYA's premium burgundy/gold branding. Body: English report, Times New

@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowUpRight, SearchX } from "lucide-react";
-import { SPACES } from "@/lib/data/spaces";
+import { SPACES, type SpaceRecord } from "@/lib/data/spaces";
 import { Media } from "@/components/media/media";
 import { Reveal } from "@/components/motion/reveal";
 import { track } from "@/lib/analytics";
@@ -11,13 +11,13 @@ import { track } from "@/lib/analytics";
 type SettingFilter = "ALL" | "INDOOR" | "OUTDOOR";
 type OccasionFilter = "ALL" | "WEDDING" | "BUSINESS" | "CELEBRATION";
 
-export function SpacesListing() {
+export function SpacesListing({ spaces = SPACES }: { spaces?: SpaceRecord[] } = {}) {
   const [setting, setSetting] = useState<SettingFilter>("ALL");
   const [occasion, setOccasion] = useState<OccasionFilter>("ALL");
   const [guests, setGuests] = useState("");
 
   const filtered = useMemo(() => {
-    return SPACES.filter((s) => {
+    return spaces.filter((s) => {
       if (setting !== "ALL" && s.indoorOrOutdoor !== setting) return false;
       if (occasion !== "ALL" && s.venueCategory !== "MULTI" && s.venueCategory !== occasion) return false;
       if (guests && s.guestRange) {
@@ -26,7 +26,7 @@ export function SpacesListing() {
       }
       return true;
     });
-  }, [setting, occasion, guests]);
+  }, [setting, occasion, guests, spaces]);
 
   const chip = (active: boolean) =>
     `chip cursor-pointer transition-all duration-300 ${

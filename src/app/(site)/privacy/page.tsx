@@ -1,20 +1,22 @@
+import { pageCopy, pageMetadata } from "@/lib/content";
 import type { Metadata } from "next";
 import { PolicyPage } from "@/components/layout/policy-page";
 
-export const metadata: Metadata = {
+const metadata: Metadata = {
   title: "Privacy",
   description: "How VIJAYA International Convention Centre collects, uses and protects your personal information.",
 };
 
-export default function PrivacyPage() {
+export default async function PrivacyPage() {
+  const copy = await pageCopy("privacy");
   return (
     <PolicyPage
-      eyebrow="Legal"
-      title="Privacy Notice"
+      eyebrow={copy("eyebrow.legal", "Legal")}
+      title={copy("title.privacy-notice", "Privacy Notice")}
       crumb="Privacy"
       updated="Provisional — pending VICC approval"
-      image="/media/exp-landscape.jpg"
-      intro="Your occasion is personal — so is your data. This notice explains what we collect, why, and the controls you have."
+      image={copy("image.exp-landscape-jpg", "/media/exp-landscape.jpg")}
+      intro={copy("intro.your-occasion-is-personal-so-is-your-data-this-not", "Your occasion is personal — so is your data. This notice explains what we collect, why, and the controls you have.")}
       sections={[
         {
           heading: "1. What we collect",
@@ -47,3 +49,5 @@ export default function PrivacyPage() {
     />
   );
 }
+
+export const generateMetadata = () => pageMetadata("privacy", metadata);

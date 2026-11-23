@@ -1,20 +1,22 @@
+import { pageCopy, pageMetadata } from "@/lib/content";
 import type { Metadata } from "next";
 import { PolicyPage } from "@/components/layout/policy-page";
 
-export const metadata: Metadata = {
+const metadata: Metadata = {
   title: "Booking Policy",
   description: "How booking, holds, payments and confirmations work at VIJAYA International Convention Centre.",
 };
 
-export default function BookingPolicyPage() {
+export default async function BookingPolicyPage() {
+  const copy = await pageCopy("booking-policy");
   return (
     <PolicyPage
-      eyebrow="Policies"
-      title="Booking Policy"
+      eyebrow={copy("eyebrow.policies", "Policies")}
+      title={copy("title.booking-policy", "Booking Policy")}
       crumb="Booking Policy"
       updated="Provisional — pending VICC approval"
-      image="/media/space-nila.jpg"
-      intro="One calendar, two doors — online and offline bookings stay synchronised so a date can never be promised twice."
+      image={copy("image.space-nila-jpg", "/media/space-nila.jpg")}
+      intro={copy("intro.one-calendar-two-doors-online-and-offline-bookings", "One calendar, two doors — online and offline bookings stay synchronised so a date can never be promised twice.")}
       sections={[
         {
           heading: "1. Checking availability",
@@ -54,3 +56,5 @@ export default function BookingPolicyPage() {
     />
   );
 }
+
+export const generateMetadata = () => pageMetadata("booking-policy", metadata);

@@ -24,8 +24,10 @@ curl -s --max-time 20 http://localhost:3000/api/booking/VIJ-WG84SP | head -c 160
 echo "== Availability =="
 curl -s -X POST -H "Content-Type: application/json" -d '{"date":"2026-12-01","slot":"EVENING","guests":200,"eventType":"WEDDING"}' --max-time 20 http://localhost:3000/api/availability/check | head -c 160; echo
 echo "== CRM sync roundtrip =="
-curl -s -X POST -H "x-vicc-key: vicc-dev-key" -H "Content-Type: application/json" -d '{"action":"BLOCK","spaceId":"periyar","date":"2027-03-01","slot":"MORNING"}' --max-time 20 http://localhost:3000/api/crm/sync; echo
-curl -s -X POST -H "x-vicc-key: vicc-dev-key" -H "Content-Type: application/json" -d '{"action":"RELEASE","spaceId":"periyar","date":"2027-03-01","slot":"MORNING"}' --max-time 20 http://localhost:3000/api/crm/sync; echo
+if [ -n "${CRM_SYNC_KEY:-}" ]; then
+  curl -s -X POST -H "x-vicc-key: ${CRM_SYNC_KEY}" -H "Content-Type: application/json" -d '{"action":"BLOCK","spaceId":"periyar","date":"2027-03-01","slot":"MORNING"}' --max-time 20 http://localhost:3000/api/crm/sync; echo
+  curl -s -X POST -H "x-vicc-key: ${CRM_SYNC_KEY}" -H "Content-Type: application/json" -d '{"action":"RELEASE","spaceId":"periyar","date":"2027-03-01","slot":"MORNING"}' --max-time 20 http://localhost:3000/api/crm/sync; echo
+fi
 
 echo "== Runtime errors in log this run =="
 tail -200 dev.log | rg -v "prisma:query" | rg -i "error|exception|unhandled" | head -5

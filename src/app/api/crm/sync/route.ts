@@ -1,13 +1,16 @@
+import { z } from "zod";
+import { dates } from "@/lib/booking/slots";
 import { NextResponse } from "next/server";
 import { crmApplySync } from "@/lib/availability";
 import { BOOKING_CONFIG } from "@/lib/site-config";
 
+const crmInput = z.object({ action: z.enum(["BOOK", "BLOCK", "RELEASE"]), spaceId: z.string().max(100), date: dates, slot: z.string().max(40), bookingRef: z.string().max(100).optional(), note: z.string().max(2000).optional() });
 export const dynamic = "force-dynamic";
 
 /**
  * POST /api/crm/sync — VIJAYA CRM → website synchronisation endpoint.
  *
- * Auth: header `x-vicc-key` must match CRM_SYNC_KEY (dev default: vicc-dev-key).
+ * Auth: header `x-vicc-key` must match CRM_SYNC_KEY.
  * The existing CRM is TO BE CONFIRMED — this contract is ready for whichever
  * vendor is chosen. Supports three actions:
  *
@@ -20,27 +23,15 @@ export const dynamic = "force-dynamic";
  */
 export async function POST(req: Request) {
   const key = req.headers.get(BOOKING_CONFIG.crmSyncHeader);
-  const expected = process.env.CRM_SYNC_KEY || "vicc-dev-key";
-  if (!key || key !== expected) {
+  const expected = process.env.CRM_SYNC_KEY;
+  if (!expected || !key || key !== expected) {
     return NextResponse.json({ error: "Unauthorised." }, { status: 401 });
   }
   try {
-    const raw = await req.text();
-    if (!raw) {
-      return NextResponse.json({ error: "Request body required." }, { status: 400 });
-    }
-    let payload: Record<string, unknown>;
-    try {
-      payload = JSON.parse(raw);
-    } catch {
-      return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
-    }
-    if (!payload?.action || !payload?.spaceId || !payload?.date || !payload?.slot) {
-      return NextResponse.json({ error: "action, spaceId, date and slot are required." }, { status: 400 });
-    }
-    const result = await crmApplySync(payload);
-    if (!result.ok) return NextResponse.json({ error: result.message }, { status: 409 });
-    return NextResponse.json(result);
+    const payload = crmInput.safeParse(await req.json().catch(() => null));
+    if (!payload.success) return NextResponse.json({ error: "Invalid CRM request." }, { status: 422 });
+    const result = await crmApplySync(payload.data);
+    return NextResponse.json(result, { status: result.ok ? 200 : 409 });
   } catch (e) {
     console.error("crm/sync error", e);
     return NextResponse.json({ error: "Sync failed." }, { status: 500 });

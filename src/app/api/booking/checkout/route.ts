@@ -1,88 +1,46 @@
-import { NextResponse } from "next/server";
-import { db } from "@/lib/db";
-import { markPendingPayment, releaseBookingSlots } from "@/lib/availability";
-import { SLOTS } from "@/lib/site-config";
+import { z } from "zod";
+import { bookingTransaction } from "@/lib/booking/transaction";
+import { cancelIn, heldStatuses } from "@/lib/booking/state";
 
-export const dynamic = "force-dynamic";
-
-/**
- * POST /api/booking/checkout — step 7 of the flow.
- * Revalidates the hold server-side, stores customer details, moves to PENDING_PAYMENT.
- * Body: { reference, name, phone, email, country, notes?, acceptTerms: true }
- */
+const input = z.object({
+  reference: z.string().max(80).toUpperCase(),
+  name: z.string().trim().min(1).max(120),
+  email: z.email().trim().toLowerCase().max(160),
+  phone: z.string().trim().min(1).max(32),
+  country: z.string().trim().max(60).default("India"),
+  notes: z.string().max(2000).optional(),
+  acceptTerms: z.literal(true),
+});
 export async function POST(req: Request) {
-  try {
-    const body = await req.json();
-    const { reference, name, phone, email, country, notes, acceptTerms } = body || {};
-
-    if (!reference) return NextResponse.json({ error: "Booking reference required." }, { status: 400 });
-    if (!name || !phone || !email) {
-      return NextResponse.json({ error: "Name, phone and email are required." }, { status: 400 });
-    }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email))) {
-      return NextResponse.json({ error: "Please provide a valid email address." }, { status: 400 });
-    }
-    if (!acceptTerms) {
-      return NextResponse.json({ error: "Please accept the terms, booking and cancellation policies." }, { status: 400 });
-    }
-
-    const booking = await db.booking.findUnique({ where: { reference: String(reference).toUpperCase() } });
-    if (!booking) return NextResponse.json({ error: "Booking not found." }, { status: 404 });
-
-    if (booking.status === "EXPIRED" || booking.status === "CANCELLED") {
-      return NextResponse.json(
-        {
-          code: "HOLD_EXPIRED",
-          message: "Your temporary hold has expired.",
-          detail: "The selected slot has been released. You can restart Check Your Date — availability may have changed in the meantime.",
-        },
-        { status: 410 }
-      );
-    }
-    if (!SLOTS.some((s) => s.id === booking.slot)) {
-      return NextResponse.json({ error: "Unknown slot on booking." }, { status: 400 });
-    }
-
-    const ok = await markPendingPayment(booking.reference);
-    if (!ok) {
-      return NextResponse.json({ error: "This booking is no longer in a holdable state." }, { status: 409 });
-    }
-
-    const updated = await db.booking.update({
-      where: { reference: booking.reference },
-      data: {
-        customerName: String(name).slice(0, 120),
-        customerPhone: String(phone).slice(0, 32),
-        customerEmail: String(email).toLowerCase().slice(0, 160),
-        customerCountry: country ? String(country).slice(0, 60) : "India",
-        notes: notes ? String(notes).slice(0, 2000) : booking.notes,
-      },
+  const parsed = input.safeParse(await req.json().catch(() => null));
+  if (!parsed.success) return Response.json({ error: "Enter your contact details and accept the booking terms." }, { status: 422 });
+  const { reference, name, phone, email, country, notes } = parsed.data;
+  const updated = await bookingTransaction(async (tx) => {
+    const booking = await tx.booking.findUnique({ where: { reference } });
+    if (!booking || booking.status !== "HOLD" || !booking.holdExpiresAt || booking.holdExpiresAt <= new Date()) return null;
+    const locks = await tx.slotState.updateMany({
+      where: { bookingRef: reference, status: "TEMPORARY_HOLD", source: "ONLINE" },
+      data: { status: "PENDING_PAYMENT", holdExpiresAt: booking.holdExpiresAt },
     });
-
-    return NextResponse.json({
-      reference: updated.reference,
-      status: updated.status,
-      totalPayable: updated.totalPayable,
+    if (!locks.count) return null;
+    await tx.auditLog.create({ data: { action: "CHECKOUT_STARTED", entity: "Booking", entityRef: reference } });
+    return tx.booking.update({
+      where: { reference },
+      data: { status: "PENDING_PAYMENT", customerName: name, customerPhone: phone, customerEmail: email, customerCountry: country, notes },
+      select: { reference: true, status: true, totalPayable: true },
     });
-  } catch (e) {
-    console.error("booking/checkout error", e);
-    return NextResponse.json({ error: "Checkout failed. Please try again." }, { status: 500 });
-  }
+  });
+  return updated ? Response.json(updated) : Response.json({ code: "HOLD_EXPIRED", error: "Your temporary hold is no longer available." }, { status: 409 });
 }
 
-/**
- * DELETE /api/booking/checkout?reference=VIJ-XXXX — customer abandons checkout;
- * releases the hold immediately (calm, no penalty).
- */
 export async function DELETE(req: Request) {
-  const url = new URL(req.url);
-  const reference = url.searchParams.get("reference");
-  if (!reference) return NextResponse.json({ error: "reference required" }, { status: 400 });
-  const booking = await db.booking.findUnique({ where: { reference: reference.toUpperCase() } });
-  if (!booking) return NextResponse.json({ error: "not found" }, { status: 404 });
-  if (booking.status !== "CONFIRMED") {
-    await releaseBookingSlots(booking.reference, "customer_abandoned");
-    await db.booking.update({ where: { reference: booking.reference }, data: { status: "CANCELLED", cancelledAt: new Date() } });
-  }
-  return NextResponse.json({ ok: true });
+  const reference = new URL(req.url).searchParams.get("reference")?.toUpperCase();
+  if (!reference || reference.length > 80) return Response.json({ error: "Booking reference required." }, { status: 422 });
+  await bookingTransaction(async (tx) => {
+    const booking = await tx.booking.findUnique({ where: { reference } });
+    if (booking?.source === "WEB" && heldStatuses.includes(booking.status)) {
+      await cancelIn(tx, booking, "CANCELLED", "Customer abandoned checkout");
+    }
+  });
+  return Response.json({ ok: true });
 }

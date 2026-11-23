@@ -2,9 +2,13 @@
  * VIJAYA seed — syncs bookable inventory into the DB and creates demo state.
  * Run: npx tsx prisma/seed.ts (or bun prisma/seed.ts)
  */
+import { loadEnvConfig } from "@next/env";
+import { hash } from "bcryptjs";
+import { z } from "zod";
 import { PrismaClient } from "@prisma/client";
 import { SPACES } from "../src/lib/data/spaces";
 
+loadEnvConfig(process.cwd());
 const db = new PrismaClient();
 
 async function main() {
@@ -25,19 +29,27 @@ async function main() {
         availabilityEnabled: s.availabilityEnabled,
         active: true,
       },
-      update: {
-        name: s.officialName,
-        category: s.venueCategory,
-        setting: s.indoorOrOutdoor,
-        capacityMin: s.guestRange?.[0] ?? null,
-        capacityMax: s.guestRange?.[1] ?? null,
-        bookableOnline: s.bookableOnline,
-        requiresApproval: s.requiresManualApproval,
-        availabilityEnabled: s.availabilityEnabled,
-        active: true,
-      },
+      update: {},
     });
   }
+
+  if (!await db.adminUser.findFirst({ where: { role: "SUPER_ADMIN" } })) {
+    const password = process.env.SEED_ADMIN_PASSWORD;
+    const email = process.env.SEED_ADMIN_EMAIL;
+    if (!password || !email) {
+      if (process.env.NODE_ENV === "production") throw new Error("Set SEED_ADMIN_EMAIL and SEED_ADMIN_PASSWORD to provision the Super Admin.");
+    } else {
+      if (Buffer.byteLength(password) < 8 || Buffer.byteLength(password) > 72) throw new Error("Bootstrap password must be 8–72 bytes.");
+      const passwordHash = await hash(password, 12);
+      await db.$transaction(async (tx) => {
+        if (await tx.adminUser.findFirst({ where: { role: "SUPER_ADMIN" } })) return;
+        await tx.adminUser.create({ data: {
+          email: z.email().parse(email.trim().toLowerCase()), name: "VIJAYA Administrator", passwordHash, role: "SUPER_ADMIN",
+        } });
+      });
+    }
+  }
+  if (process.env.SEED_DEMO_DATA !== "true" || process.env.NODE_ENV === "production") return;
 
   // Sample CRM-side blocks so the calendar demonstrates the offline booking sync.
   // These are DEMO rows — cleared by re-seeding; the CRM endpoint manages real ones.

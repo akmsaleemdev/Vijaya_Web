@@ -1,52 +1,33 @@
-import { NextResponse } from "next/server";
-import crypto from "crypto";
-import { db } from "@/lib/db";
+import { randomUUID } from "node:crypto";
+import { z } from "zod";
 import { getPortalSession } from "@/lib/portal-auth";
-import { confirmBooking } from "@/lib/availability";
+import { bookingTransaction } from "@/lib/booking/transaction";
 
-export const dynamic = "force-dynamic";
-
-/**
- * POST /api/portal/pay — "Pay Now" for a scheduled instalment or balance.
- * Sandbox adapter: creates a payment and confirms it through the same
- * verified webhook path as checkout payments.
- */
+const input = z.object({ purpose: z.literal("balance").optional(), amount: z.number().optional() });
 export async function POST(req: Request) {
-  try {
-    const session = await getPortalSession();
-    if (!session) return NextResponse.json({ error: "Sign in required." }, { status: 401 });
-
-    const { amount, purpose } = await req.json();
-    const payAmount = Number(amount);
-    if (!payAmount || payAmount < 1) {
-      return NextResponse.json({ error: "A valid amount is required." }, { status: 400 });
-    }
-
-    const booking = await db.booking.findUnique({ where: { reference: session.reference } });
-    if (!booking || booking.customerEmail !== session.email) {
-      return NextResponse.json({ error: "Booking not found for this session." }, { status: 404 });
-    }
-
-    const providerRef = `SBX-${crypto.randomBytes(6).toString("hex").toUpperCase()}`;
-    const payment = await db.payment.create({
-      data: {
-        bookingId: booking.id,
-        provider: "SANDBOX",
-        providerRef,
-        idempotencyKey: `portal-${providerRef}`,
-        amount: Math.round(payAmount),
-        status: "SUCCESS",
-        method: "sandbox",
-        transactionId: `TXN-${Date.now()}`,
-      },
+  if (process.env.ENABLE_SANDBOX_PAYMENTS !== "true") return Response.json({ error: "Online payments are unavailable." }, { status: 403 });
+  if (req.headers.get("origin") !== new URL(process.env.NEXTAUTH_URL ?? req.url).origin) return Response.json({ error: "Invalid origin." }, { status: 403 });
+  const session = await getPortalSession();
+  if (!session) return Response.json({ error: "Sign in required." }, { status: 401 });
+  const key = req.headers.get("Idempotency-Key");
+  const parsed = input.safeParse(await req.json().catch(() => null));
+  if (!parsed.success || (key && key.length > 128)) return Response.json({ error: "Invalid payment request." }, { status: 422 });
+  return bookingTransaction(async (tx) => {
+    const booking = await tx.booking.findFirst({
+      where: { customerEmail: session.email, status: { in: ["CONFIRMED", "PENDING_PAYMENT", "HOLD"] } },
+      include: { payments: true }, orderBy: { eventDate: "desc" },
     });
-    await db.document.create({
-      data: { bookingId: booking.id, type: "RECEIPT", title: `Payment Receipt — ${payment.providerRef}` },
-    });
-    const crm = await confirmBooking(booking.reference, providerRef);
-    return NextResponse.json({ ok: true, providerRef, crmSync: crm.crmSync });
-  } catch (e) {
-    console.error("portal/pay error", e);
-    return NextResponse.json({ error: "Payment failed. Please try again." }, { status: 500 });
-  }
+    if (!booking || booking.status !== "CONFIRMED") return Response.json({ error: "Booking is not confirmed." }, { status: 409 });
+    const idempotencyKey = `portal:${booking.id}:${key ?? "balance"}`;
+    const existing = await tx.payment.findUnique({ where: { idempotencyKey } });
+    if (existing) return Response.json({ ok: true, providerRef: existing.providerRef });
+    const paid = booking.payments.filter((payment) => payment.status === "SUCCESS").reduce((sum, payment) => sum + payment.amount, 0);
+    const amount = booking.baseAmount + booking.weekendUplift + booking.taxAmount - paid;
+    if (amount <= 0) return Response.json({ error: "The booking balance is already settled." }, { status: 409 });
+    const providerRef = "SBX-" + randomUUID();
+    await tx.payment.create({ data: { bookingId: booking.id, provider: "SANDBOX", providerRef, idempotencyKey, amount, status: "SUCCESS", method: "sandbox", paidAt: new Date() } });
+    await tx.document.create({ data: { bookingId: booking.id, type: "RECEIPT", title: `Payment Receipt — ${providerRef}` } });
+    await tx.auditLog.create({ data: { action: "PAYMENT_SUCCESS", entity: "Payment", entityRef: providerRef } });
+    return Response.json({ ok: true, providerRef });
+  });
 }

@@ -25,6 +25,9 @@ model Space {
   requiresApproval   Boolean  @default(false)
   availabilityEnabled Boolean @default(true)
   active             Boolean  @default(true)
+  sortOrder          Int @default(0)
+  description        String?
+  pricingJson        String?
   slotStates         SlotState[]
   bookings           Booking[]
   createdAt          DateTime @default(now())
@@ -42,6 +45,9 @@ model SlotState {
   source        String    @default("ONLINE") // ONLINE | OFFLINE_CRM | OPS
   holdExpiresAt DateTime?
   bookingRef    String?
+  startMinute   Int?
+  endMinute     Int?
+  groupId       String?
   note          String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
@@ -49,6 +55,7 @@ model SlotState {
 
   @@unique([spaceId, date, slot])
   @@index([date, slot])
+  @@index([bookingRef])
 }
 
 /// Customer booking record.
@@ -67,6 +74,12 @@ model Booking {
   customerName   String
   customerPhone  String
   customerEmail  String
+  source         String @default("WEB")
+  createdById    String?
+  requestKey     String? @unique
+  requestHash    String?
+  startAt        DateTime?
+  endAt          DateTime?
   customerCountry String   @default("India")
   notes          String?
   baseAmount     Int
@@ -101,6 +114,7 @@ model Payment {
   method         String?
   transactionId  String?
   failureReason  String?
+  paidAt         DateTime?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
   booking        Booking  @relation(fields: [bookingId], references: [id])
@@ -127,6 +141,8 @@ model Lead {
   visitTime     String?
   message       String?
   source        String   @default("website")
+  internalNotes String?
+  followUpAt    DateTime?
   utmJson       String? // JSON string — utm_source etc.
   createdAt     DateTime @default(now())
 
@@ -186,6 +202,107 @@ model AuditLog {
   action    String
   entity    String
   entityRef String
+  actorId   String?
+  ip        String?
+  beforeJson String?
+  afterJson  String?
   detailJson String?
   createdAt DateTime @default(now())
+}
+
+model AdminUser {
+  id                 String   @id @default(cuid())
+  email              String   @unique
+  name               String
+  passwordHash       String
+  role               String
+  disabled           Boolean  @default(false)
+  mustChangePassword Boolean  @default(true)
+  sessionVersion     Int      @default(0)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model LoginAttempt {
+  key         String   @id
+  failures    Int      @default(0)
+  resetAt     DateTime
+}
+
+model ContentEntry {
+  id           String   @id @default(cuid())
+  key          String
+  locale       String
+  draft        String
+  published    String?
+  editedBy     String
+  updatedAt    DateTime @updatedAt
+  versions     ContentVersion[]
+  @@unique([key, locale])
+}
+
+model ContentVersion {
+  id         String   @id @default(cuid())
+  entryId    String
+  payload    String
+  actorId    String
+  createdAt  DateTime @default(now())
+  entry      ContentEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  @@index([entryId, createdAt])
+}
+
+model MediaAsset {
+  id        String   @id @default(cuid())
+  filename  String
+  mime      String
+  size      Int
+  alt       String
+  folder    String
+  tags      String
+  createdAt DateTime @default(now())
+}
+
+model CustomerNote {
+  id        String   @id @default(cuid())
+  email     String
+  note      String
+  actorId   String
+  createdAt DateTime @default(now())
+  @@index([email])
+}
+
+model BookingNote {
+  id         String   @id @default(cuid())
+  bookingRef String
+  note       String
+  actorId    String
+  createdAt  DateTime @default(now())
+  @@index([bookingRef])
+}
+
+model EmailLog {
+  id          String   @id @default(cuid())
+  bookingRef  String
+  template    String
+  status      String
+  createdAt   DateTime @default(now())
+}
+
+model SessionConfig {
+  id          String  @id @default(cuid())
+  spaceId     String
+  key         String
+  label       String
+  startMinute Int
+  endMinute   Int
+  enabled     Boolean @default(true)
+  @@unique([spaceId, key])
+}
+
+model AdminSession {
+  id         String   @id
+  adminId    String
+  lastSeenAt DateTime
+  expiresAt  DateTime
+  @@index([adminId])
 }

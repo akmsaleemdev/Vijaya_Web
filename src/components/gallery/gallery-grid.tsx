@@ -8,11 +8,13 @@ import { Reveal } from "@/components/motion/reveal";
 
 const CATEGORIES = ["All", "Property", "Weddings", "Corporate Events", "Celebrations", "Outdoor", "Architecture", "Details"] as const;
 
-export function GalleryGrid() {
-  const [cat, setCat] = useState<(typeof CATEGORIES)[number]>("All");
+type GridItem = { src: string; category: string; caption: string; alt?: string };
+
+export function GalleryGrid({ gallery = GALLERY }: { gallery?: GridItem[] }) {
+  const [cat, setCat] = useState("All");
   const [lightbox, setLightbox] = useState<number | null>(null);
 
-  const items = useMemo(() => (cat === "All" ? GALLERY : GALLERY.filter((g) => g.category === cat)), [cat]);
+  const items = useMemo(() => (cat === "All" ? gallery : gallery.filter((g) => g.category === cat)), [cat, gallery]);
 
   const close = useCallback(() => setLightbox(null), []);
   const next = useCallback(() => setLightbox((v) => (v === null ? null : (v + 1) % items.length)), [items.length]);
@@ -40,7 +42,7 @@ export function GalleryGrid() {
     <section className="py-14 md:py-20" aria-label="Gallery">
       <div className="container-editorial">
         <div className="flex flex-wrap gap-2" role="toolbar" aria-label="Filter gallery">
-          {CATEGORIES.map((c) => (
+          {Array.from(new Set([...CATEGORIES, ...gallery.map((item) => item.category)])).map((c) => (
             <button key={c} onClick={() => { setCat(c); setLightbox(null); }} className={chip(cat === c)} aria-pressed={cat === c}>
               {c}
             </button>
@@ -63,7 +65,7 @@ export function GalleryGrid() {
                   aria-label={`Open image: ${g.caption}`}
                 >
                   <div className={`relative w-full ${i % 3 === 0 ? "aspect-[3/4]" : i % 3 === 1 ? "aspect-square" : "aspect-[4/3]"}`}>
-                    <Media src={g.src} alt={g.caption} className="transition-transform duration-[1.3s] group-hover:scale-[1.05]" sizes="(max-width: 768px) 50vw, 25vw" />
+                    <Media src={g.src} alt={g.alt ?? g.caption} className="transition-transform duration-[1.3s] group-hover:scale-[1.05]" sizes="(max-width: 768px) 50vw, 25vw" />
                   </div>
                   <div className="absolute inset-0 bg-ink/0 transition-colors duration-500 group-hover:bg-ink/25" />
                 </button>
