@@ -28,3 +28,11 @@ The portal uses its own signed cookie. There is no CMS user model, admin session
 ## Migration approach
 
 Create a baseline migration from the original schema, then apply additive CMS changes and database overlap guards. Reuse Space, Booking, Payment, Lead, AuditLog and SlotState. Keep existing field names and statuses compatible with checkout and the portal. Back up an existing installation before recording the baseline and applying the upgrade. No production database is available in this checkout. For a future PostgreSQL migration, use a range exclusion constraint on physical venue and UTC time ranges, retain transactions, and verify existing conflicts before switching.
+
+## Supabase live CMS audit
+
+Reviewed GitHub main at `cff58ff`, the attached SQLite-era schema and seed, the Prisma PostgreSQL migration and import path, and the admin and public booking routes. The attached files predate the CMS, role model, dual pooler configuration, overlap constraint and offline request state. They are reference material for legacy data. The repository's PostgreSQL schema and idempotent venue and Super Admin seed are the migration baseline.
+
+The latest public layout reads some CMS records but the database seed creates only venue inventory and staff credentials. Shared components, venue details, root structured data and operational copy still use original source literals. `CONTENT_INVENTORY.md` records the source and public surface. The existing cache has one global tag and a 60-second TTL. CMS uploads use one private Storage bucket with a local fallback for standalone use.
+
+Occupancy is stored per physical venue in `SlotState`. A PostgreSQL exclusion constraint rejects overlapping physical coverage, including grouped venues, blocks and unpaid pending approvals. The API wraps state transitions in a transaction and lazily expires holds. Confirming an unpaid request remains a staff operation. Existing Supabase application tables are already RLS-enabled in the private `vijaya` schema. Admin login uses NextAuth credentials plus role and session checks.
