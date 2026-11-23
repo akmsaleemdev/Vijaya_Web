@@ -81,6 +81,7 @@ export type AvailabilityStatus =
   | "AVAILABLE"
   | "TEMPORARY_HOLD"
   | "PENDING_PAYMENT"
+  | "PENDING_APPROVAL"
   | "CONFIRMED"
   | "BLOCKED"
   | "MAINTENANCE"

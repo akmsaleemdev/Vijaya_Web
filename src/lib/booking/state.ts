@@ -4,6 +4,7 @@ import { intervals, overlaps, slotKeys, utcRange } from "./slots";
 import { bookingTransaction } from "./transaction";
 
 export const heldStatuses = ["HOLD", "PENDING_PAYMENT"];
+export const pendingStatuses = [...heldStatuses, "PENDING_APPROVAL"];
 export function physicalSpaces(slug: string) {
   return COMBO_RULES.find((combo) => combo.active && combo.comboSlug === slug)?.childSlugs ?? [slug];
 }
@@ -48,8 +49,8 @@ export async function reserve(tx: Prisma.TransactionClient, data: {
   status: string; source: string; bookingRef?: string; holdExpiresAt?: Date; note?: string; groupId?: string;
 }) {
   const spaceIds = physicalSpaces(data.spaceSlug);
-  // Prisma can report the SQLite trigger rejection as a foreign-key error.
-  // Check the same range inside the write transaction to return a stable conflict.
+  // Check the interval inside the write transaction so callers get a stable
+  // application error. PostgreSQL still enforces exclusion at write time.
   const occupants = await tx.slotState.findMany({ where: {
     spaceId: { in: spaceIds }, date: data.date, status: { not: "CANCELLED" },
   } });
@@ -66,7 +67,8 @@ export async function reserve(tx: Prisma.TransactionClient, data: {
       holdExpiresAt: data.holdExpiresAt, note: data.note, groupId: data.groupId,
     })) });
   } catch (error) {
-    if (typeof error === "object" && error !== null && "code" in error && error.code === "P2002") {
+    const duplicate = typeof error === "object" && error !== null && "code" in error && error.code === "P2002";
+    if (duplicate || (error instanceof Error && /SlotState_no_overlap|23P01/.test(error.message))) {
       throw new SlotConflict("SLOT_UNAVAILABLE", { cause: error });
     }
     throw error;

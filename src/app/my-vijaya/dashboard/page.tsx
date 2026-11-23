@@ -33,7 +33,7 @@ export default async function PortalDashboardPage() {
   const widgets = [
     { icon: CalendarDays, label: "Event Date", value: new Date(b.eventDate + "T00:00:00Z").toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }) },
     { icon: MapPin, label: "Venue", value: `${b.spaceName} · ${slotLabel}` },
-    { icon: BadgeCheck, label: "Booking Status", value: b.status === "CONFIRMED" ? "Confirmed" : b.status === "PENDING_PAYMENT" ? "Payment pending" : b.status },
+    { icon: BadgeCheck, label: "Booking Status", value: b.status === "CONFIRMED" ? "Confirmed" : b.status === "PENDING_PAYMENT" ? "Payment pending" : b.status === "PENDING_APPROVAL" ? "Awaiting VIJAYA approval" : b.status },
     { icon: Wallet, label: "Payment Progress", value: `${inr(paid)} paid · ${inr(balance)} balance` },
     { icon: Flag, label: "Next Milestone", value: nextMilestone ? `${nextMilestone.title} — ${nextMilestone.dueDate}` : "All milestones complete" },
     { icon: UserCheck, label: "Event Manager", value: "VIJAYA Events Desk (assigned at 60-day mark)" },

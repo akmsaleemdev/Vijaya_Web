@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { useState } from "react";
 import dynamic from "next/dynamic";
+import { PaymentGateways } from "./payment-gateways";
 import { GalleryEditor } from "./gallery-editor";
 const NewsEditor = dynamic(() => import("./news-editor"), { ssr: false });
 import type { modules } from "@/lib/admin/modules";
@@ -15,7 +16,7 @@ type Data = string | number | boolean | null;
 type Row = { id: string; [key: string]: unknown };
 const labels: Record<Module, string> = {
   dashboard: "Overview", bookings: "Bookings", calendar: "Calendar", venues: "Venues & pricing", content: "Website content",
-  media: "Media library", enquiries: "Enquiries", customers: "Customers", payments: "Payments", notifications: "Notifications",
+  gateways: "Payment gateways", media: "Media library", enquiries: "Enquiries", customers: "Customers", payments: "Payments", notifications: "Notifications",
   users: "Users & roles", audit: "Audit log", settings: "Settings",
 };
 const roles = ["SUPER_ADMIN", "MANAGER", "EDITOR", "VIEWER"] as const;
@@ -36,6 +37,7 @@ export function AdminModule({ module, role }: { module: Module; role: typeof rol
     {module === "media" && <Media />}
     {module === "enquiries" && <Enquiries />}
     {module === "customers" && <Customers />}
+    {module === "gateways" && <PaymentGateways />}
     {module === "payments" && <Payments />}
     {module === "notifications" && <Notifications />}
     {module === "users" && <Users />}

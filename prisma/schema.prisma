@@ -3,8 +3,9 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 // ---------------------------------------------------------------------------
@@ -41,7 +42,7 @@ model SlotState {
   spaceId       String
   date          String // YYYY-MM-DD
   slot          String // MORNING | AFTERNOON | EVENING | FULL_DAY
-  status        String // TEMPORARY_HOLD | PENDING_PAYMENT | CONFIRMED | BLOCKED | MAINTENANCE | INTERNAL_USE
+  status        String // TEMPORARY_HOLD | PENDING_APPROVAL | PENDING_PAYMENT | CONFIRMED | BLOCKED | MAINTENANCE | INTERNAL_USE
   source        String    @default("ONLINE") // ONLINE | OFFLINE_CRM | OPS
   holdExpiresAt DateTime?
   bookingRef    String?
@@ -69,7 +70,7 @@ model Booking {
   eventDate      String // YYYY-MM-DD
   slot           String
   guests         Int
-  status         String // HOLD | PENDING_PAYMENT | CONFIRMED | CANCELLED | EXPIRED
+  status         String // HOLD | PENDING_APPROVAL | PENDING_PAYMENT | CONFIRMED | CANCELLED | EXPIRED
   crmSync        String    @default("NOT_CONNECTED") // NOT_CONNECTED | SYNCED | QUEUED | FAILED
   customerName   String
   customerPhone  String
@@ -305,4 +306,18 @@ model AdminSession {
   lastSeenAt DateTime
   expiresAt  DateTime
   @@index([adminId])
+}
+
+model PaymentSettings {
+  id           String   @id
+  mode         String   @default("OFFLINE")
+  provider     String   @default("SIMULATOR")
+  updatedAt    DateTime @updatedAt
+}
+
+model GatewayCredential {
+  provider       String   @id
+  keyId          String
+  encrypted      String
+  updatedAt      DateTime @updatedAt
 }

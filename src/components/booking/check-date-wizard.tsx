@@ -2,7 +2,7 @@
 
 /**
  * Check Your Date — the core booking product (steps 1–6 of the 9-step journey).
- * Steps 7–9 (details → payment → confirmation) continue at /book/[reference].
+ * Steps 7–9 (booking details and confirmation) continue at /book/[reference].
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";

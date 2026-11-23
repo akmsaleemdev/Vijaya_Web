@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { bookingTransaction } from "@/lib/booking/transaction";
+import { bookingMode } from "@/lib/payments/settings";
 import { cancelIn, heldStatuses } from "@/lib/booking/state";
 
 const input = z.object({
@@ -17,16 +18,24 @@ export async function POST(req: Request) {
   const { reference, name, phone, email, country, notes } = parsed.data;
   const updated = await bookingTransaction(async (tx) => {
     const booking = await tx.booking.findUnique({ where: { reference } });
-    if (!booking || booking.status !== "HOLD" || !booking.holdExpiresAt || booking.holdExpiresAt <= new Date()) return null;
+    if (!booking || booking.source !== "WEB") return null;
+    if (["PENDING_APPROVAL", "PENDING_PAYMENT", "CONFIRMED"].includes(booking.status) && booking.customerEmail === email) {
+      return { reference, status: booking.status, totalPayable: booking.totalPayable };
+    }
+    if (booking.status !== "HOLD" || !booking.holdExpiresAt || booking.holdExpiresAt <= new Date()) return null;
+    const space = await tx.space.findUnique({ where: { id: booking.spaceId }, select: { requiresApproval: true } });
+    const sandbox = !space?.requiresApproval && await bookingMode(tx) === "SANDBOX";
+    const status = sandbox ? "PENDING_PAYMENT" : "PENDING_APPROVAL";
+    const holdExpiresAt = sandbox ? booking.holdExpiresAt : null;
     const locks = await tx.slotState.updateMany({
       where: { bookingRef: reference, status: "TEMPORARY_HOLD", source: "ONLINE" },
-      data: { status: "PENDING_PAYMENT", holdExpiresAt: booking.holdExpiresAt },
+      data: { status, holdExpiresAt },
     });
     if (!locks.count) return null;
-    await tx.auditLog.create({ data: { action: "CHECKOUT_STARTED", entity: "Booking", entityRef: reference } });
+    await tx.auditLog.create({ data: { action: sandbox ? "CHECKOUT_STARTED" : "BOOKING_REQUEST_SUBMITTED", entity: "Booking", entityRef: reference } });
     return tx.booking.update({
       where: { reference },
-      data: { status: "PENDING_PAYMENT", customerName: name, customerPhone: phone, customerEmail: email, customerCountry: country, notes },
+      data: { status, holdExpiresAt, customerName: name, customerPhone: phone, customerEmail: email, customerCountry: country, notes },
       select: { reference: true, status: true, totalPayable: true },
     });
   });

@@ -1,3 +1,4 @@
+import { bookingMode } from "@/lib/payments/settings";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { getPortalSession } from "@/lib/portal-auth";
@@ -5,7 +6,6 @@ import { bookingTransaction } from "@/lib/booking/transaction";
 
 const input = z.object({ purpose: z.literal("balance").optional(), amount: z.number().optional() });
 export async function POST(req: Request) {
-  if (process.env.ENABLE_SANDBOX_PAYMENTS !== "true") return Response.json({ error: "Online payments are unavailable." }, { status: 403 });
   if (req.headers.get("origin") !== new URL(process.env.NEXTAUTH_URL ?? req.url).origin) return Response.json({ error: "Invalid origin." }, { status: 403 });
   const session = await getPortalSession();
   if (!session) return Response.json({ error: "Sign in required." }, { status: 401 });
@@ -13,6 +13,7 @@ export async function POST(req: Request) {
   const parsed = input.safeParse(await req.json().catch(() => null));
   if (!parsed.success || (key && key.length > 128)) return Response.json({ error: "Invalid payment request." }, { status: 422 });
   return bookingTransaction(async (tx) => {
+    if ((await bookingMode(tx)) !== "SANDBOX") return Response.json({ error: "Online payments are unavailable." }, { status: 403 });
     const booking = await tx.booking.findFirst({
       where: { customerEmail: session.email, status: { in: ["CONFIRMED", "PENDING_PAYMENT", "HOLD"] } },
       include: { payments: true }, orderBy: { eventDate: "desc" },

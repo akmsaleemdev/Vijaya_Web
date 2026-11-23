@@ -4,109 +4,29 @@ Production website for VIJAYA International Convention Centre, Thiruvalla, Keral
 A premium destination for weddings, celebrations and business events.
 
 **Stack:** Next.js 16 (App Router) · React 19 · TypeScript · Tailwind CSS 4 ·
-shadcn/ui · Prisma (SQLite) · next-intl · Framer Motion · z-ai-web-dev-sdk
+shadcn/ui · Prisma (PostgreSQL) · next-intl · Framer Motion · z-ai-web-dev-sdk
 
 ---
 
-## Requirements
+## Supabase and Vercel deployment
 
-- Node.js 20.19+ with npm. Bun can run the application as well.
-- A persistent writable volume for SQLite and media in production.
-- ffmpeg is only needed to re-encode the supplied hero video.
+Follow the [step-by-step deployment guide](docs/SUPABASE-VERCEL.md) to create
+Supabase PostgreSQL and Storage, apply Prisma migrations, import existing
+SQLite data if needed, and deploy to Vercel.
 
-## Quick start
+The public booking flow accepts unpaid requests by default. Pending approval
+reserves the venue until staff confirm, reject or cancel the request. The Super
+Admin can select the sandbox simulator on a test deployment and store encrypted
+test credentials for planned Razorpay or Stripe integration.
 
-```bash
-npm ci
-cp .env.example .env
-mkdir -p db
-touch db/custom.db
-npm run db:generate
-npm run db:deploy
-npm run db:seed
-npm run dev
-```
+For local development use Node.js 22. Configure `.env` from `.env.example`, run
+`npm ci`, `npm run db:deploy`, `npm run db:seed`, and then `npm run dev`.
+Use `npm run build:standalone` and `npm start` for self-hosted standalone
+deployments. The regular `npm run build` targets the Next.js build used by Vercel.
 
-Set `NEXTAUTH_SECRET` and `AUTH_SECRET` to independently generated random secrets. Set
-`SEED_ADMIN_EMAIL` and `SEED_ADMIN_PASSWORD` in the environment before running the seed.
-The initial account signs in at `/admin/login` and must change its temporary password
-before accessing the CMS. The seed preserves edits to existing venues and credentials
-of an existing Super Admin. Remove the bootstrap password from the process environment
-after provisioning. `SEED_DEMO_DATA=true` is available for local demos only.
-
-| Role | Access |
-| --- | --- |
-| Super Admin | All workspaces, exports, settings, users and audit |
-| Manager | Bookings, calendar, venues, content, media, enquiries, customers and payments |
-| Editor | Content and media |
-| Viewer | Read-only overview, bookings and calendar |
-
-Sessions expire after 30 minutes of inactivity and have a configurable absolute lifetime.
-Password changes, resets and role changes revoke previous sessions. For meaningful
-per-IP throttling behind a reverse proxy, set `TRUSTED_CLIENT_IP_HEADER` to a header whose
-value the proxy overwrites on every request. Requests without trusted IP information
-share a fallback rate-limit bucket.
-
-## Existing SQLite installations
-
-Stop writers during the migration. Use a SQLite backup from the active database,
-including any committed writes in its WAL. Save uploads separately. Run this on a
-copy first and compare booking, payment and lead counts before and after.
-
-```bash
-sqlite3 db/custom.db ".backup '/secure/backups/vijaya-before-admin.db'"
-sqlite3 /secure/backups/vijaya-before-admin.db "PRAGMA integrity_check;"
-```
-
-When the existing database exactly matches the schema of the original commit and
-has no migration history, mark the baseline as applied, then apply the CMS migration.
-
-```bash
-npx prisma migrate resolve --applied 202611230001_baseline
-npm run db:deploy
-npm run db:seed
-```
-
-A fresh database should run `db:deploy` directly without `migrate resolve`.
-Before promoting an existing database, resolve any overlapping legacy reservations
-in the operations calendar. The previous release allowed a full-day slot and a
-named slot on the same venue and date to coexist. Check the backup and the source
-records with operations before changing either booking. To restore, stop writers,
-retain the failed database for investigation, and restore both the SQLite backup
-and the matching version of the application and uploads. Keep production databases
-and backup files out of Git.
-
-For PostgreSQL, model physical-venue occupancy as half-open UTC time ranges and use
-a GiST exclusion constraint per venue. Verify historical overlaps, backfill the
-ranges and validate on a copy before switching writers.
-
-## Runtime and operations
-
-```bash
-npm run lint
-npm run typecheck
-npm run build
-npm test
-npm start
-```
-
-Run migration and seed before starting the standalone server. Configure the deployment
-process with an absolute `DATABASE_URL=file:/persistent/vijaya/custom.db` and an
-absolute `UPLOADS_DIR=/persistent/vijaya/uploads`. The production service needs HTTPS
-and `NEXTAUTH_URL` set to its canonical URL. Set `CRON_SECRET` and schedule a
-`POST /api/internal/expire-holds` with `Authorization: Bearer <CRON_SECRET>` once
-per minute. Availability and hold requests also expire stale holds on demand.
-
-Enable `ENABLE_SANDBOX_PAYMENTS=true` only on test installations. The production
-provider and outbound CRM vendor need to be configured separately. Inbound CRM
-sync requires `CRM_SYNC_KEY`. SMTP email requires `SMTP_URL` and an approved
-`SMTP_FROM`. The admin finance module records offline refunds after the operator
-processes them with the payment provider.
-
-The standalone integration suite starts a local server and creates an isolated SQLite
-database and random test credentials. It verifies auth and password rotation, hold
-contention, full-day conflicts, cancellation, blocks, expiration, idempotency and
-publishing with fallback. Set `CMS_TEST_PORT` if port 3713 is already in use.
+The application expires abandoned temporary holds when reading availability or
+creating a reservation. A trusted scheduler can also call
+`POST /api/internal/expire-holds` with the configured `CRON_SECRET` bearer token.
 
 ## Content
 
@@ -177,8 +97,8 @@ node scripts/gen_perf_report.js       # Regenerate the performance report docx
 
 ## Notes
 
-- This archive **excludes** `node_modules/`, `.next/`, `.git/`, the production
-  SQLite database (`db/custom.db`), and the real `.env`. Run `npm ci` and
+- This archive **excludes** `node_modules/`, `.next/`, `.git/`, legacy
+  SQLite databases and backups, and the real `.env`. Run `npm ci` and
   the database setup steps above to get a running copy.
 - The production database is excluded to avoid shipping customer data; the
   schema and seed in `prisma/` recreate the structure with sample data.

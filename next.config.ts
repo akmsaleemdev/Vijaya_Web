@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  output: "standalone",
+  output: process.env.VERCEL === "1" ? undefined : "standalone",
   images: {
     // Serve modern formats first: AVIF (~50% smaller than JPEG) where the
     // browser supports it, WebP as the universal fallback.

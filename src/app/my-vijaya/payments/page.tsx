@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getPortalSession, getPortalBookings } from "@/lib/portal-auth";
+import { bookingMode } from "@/lib/payments/settings";
 import { inr } from "@/lib/pricing";
 import { PayNowButton } from "@/components/portal/pay-now-button";
 
@@ -23,6 +24,7 @@ export default async function PortalPaymentsPage() {
     );
   }
 
+  const sandbox = await bookingMode() === "SANDBOX";
   const totalContract = b.baseAmount + b.weekendUplift + b.taxAmount;
   const paid = b.payments.filter((p) => p.status === "SUCCESS").reduce((s, p) => s + p.amount, 0);
   const balance = Math.max(0, totalContract - paid);
@@ -74,7 +76,8 @@ export default async function PortalPaymentsPage() {
               Schedule shown is a sample structure pending the signed agreement. Taxes and mandatory charges are always
               displayed before any payment.
             </p>
-            {balance > 0 && <PayNowButton amount={balance} label={`Pay ${inr(balance)} towards balance`} />}
+            {sandbox && b.status === "CONFIRMED" && balance > 0 && <PayNowButton amount={balance} label={`Pay ${inr(balance)} towards balance`} />}
+            {!sandbox && <p className="mt-4 text-sm text-stone">Payment arrangements are handled by the VIJAYA team.</p>}
           </section>
 
           <section className="card-editorial p-6 md:p-8">

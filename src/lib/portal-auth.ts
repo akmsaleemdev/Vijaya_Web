@@ -50,7 +50,7 @@ export function verifySessionToken(token: string): PortalSession | null {
 export async function verifyPortalCredentials(reference: string, email: string) {
   const ref = reference.trim().toUpperCase();
   const booking = await db.booking.findFirst({
-    where: { reference: ref, customerEmail: { equals: email.trim().toLowerCase(), }, status: { in: ["CONFIRMED", "PENDING_PAYMENT", "HOLD"] } },
+    where: { reference: ref, customerEmail: { equals: email.trim().toLowerCase(), }, status: { in: ["CONFIRMED", "PENDING_APPROVAL", "PENDING_PAYMENT", "HOLD"] } },
   });
   return booking;
 }
@@ -81,7 +81,7 @@ export async function getPortalSession(): Promise<PortalSession | null> {
 /** All bookings belonging to the signed-in customer (same email). */
 export async function getPortalBookings(email: string) {
   return db.booking.findMany({
-    where: { customerEmail: email.toLowerCase(), status: { in: ["CONFIRMED", "PENDING_PAYMENT", "HOLD"] } },
+    where: { customerEmail: email.toLowerCase(), status: { in: ["CONFIRMED", "PENDING_APPROVAL", "PENDING_PAYMENT", "HOLD"] } },
     include: { payments: true, documents: true, milestones: { orderBy: { order: "desc" } } },
     orderBy: { eventDate: "desc" },
   });

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { bookingMode } from "@/lib/payments/settings";
 import { db } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
@@ -12,12 +13,13 @@ export async function GET(_req: Request, { params }: { params: Promise<{ referen
   const ref = reference.toUpperCase();
   const b = await db.booking.findUnique({
     where: { reference: ref },
-    include: { payments: { orderBy: { createdAt: "desc" } } },
+    include: { payments: { orderBy: { createdAt: "desc" } }, space: { select: { requiresApproval: true } } },
   });
   if (!b) return NextResponse.json({ error: "Booking not found." }, { status: 404 });
 
   return NextResponse.json({
     reference: b.reference,
+    bookingMode: b.space.requiresApproval ? "OFFLINE" : await bookingMode(),
     spaceName: b.spaceName,
     eventType: b.eventType,
     eventDate: b.eventDate,

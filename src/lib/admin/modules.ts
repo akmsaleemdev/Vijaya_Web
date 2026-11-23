@@ -9,6 +9,7 @@ export const modules = {
   media: { label: "Media library", roles: access.content },
   enquiries: { label: "Enquiries", roles: access.operations },
   customers: { label: "Customers", roles: access.operations },
+  gateways: { label: "Payment gateways", roles: access.owner },
   payments: { label: "Payments", roles: access.operations },
   notifications: { label: "Notifications", roles: access.operations },
   users: { label: "Users & roles", roles: access.owner },

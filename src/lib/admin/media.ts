@@ -7,9 +7,10 @@ import { db } from "@/lib/db";
 import { bookingTransaction } from "@/lib/booking/transaction";
 import { audit, failure, success, type Identity } from "./http";
 
+import { supabaseMedia } from "@/lib/media/remote-storage";
 import { assetId, uploadsDir, uploadPath } from "@/lib/media/upload-storage";
 const uploadMeta = z.object({ alt: z.string().max(300), folder: z.string().max(80), tags: z.string().max(250) });
-const maxSize = 40 * 1024 * 1024;
+const maxSize = 4 * 1024 * 1024;
 
 function sniff(buffer: Buffer) {
   if (buffer.subarray(0, 5).toString() === "%PDF-") return { ext: "pdf", mime: "application/pdf" };
@@ -20,6 +21,7 @@ function sniff(buffer: Buffer) {
 
 export async function media(req: Request, actor: Identity, id?: string) {
   if (req.method === "GET") return success(await db.mediaAsset.findMany({ orderBy: { createdAt: "desc" }, take: 300 }));
+  const storage = supabaseMedia();
   if (req.method === "DELETE") {
     if (!assetId.safeParse(id).success) return failure(422, "INVALID_FILE", "Choose a valid file.");
     const removed = await bookingTransaction(async (tx) => {
@@ -34,12 +36,17 @@ export async function media(req: Request, actor: Identity, id?: string) {
       return row;
     });
     if (removed instanceof Response) return removed;
-    await unlink(uploadPath(removed.filename)).catch((error: NodeJS.ErrnoException) => {
-      if (error.code !== "ENOENT") console.error("Media file cleanup failed", removed.id);
-    });
+    if (storage) {
+      const { error } = await storage.remove([removed.filename]);
+      if (error) console.error("Media file cleanup failed", removed.id);
+    } else {
+      await unlink(uploadPath(removed.filename)).catch((error: NodeJS.ErrnoException) => {
+        if (error.code !== "ENOENT") console.error("Media file cleanup failed", removed.id);
+      });
+    }
     return success({ id });
   }
-  if (Number(req.headers.get("content-length")) > maxSize + 8192) return failure(413, "FILE_TOO_LARGE", "Upload a file under 40 MB.");
+  if (Number(req.headers.get("content-length")) > maxSize + 8192) return failure(413, "FILE_TOO_LARGE", "Upload a file under 4 MB.");
   const form = await req.formData().catch(() => null);
   const file = form?.get("file");
   const meta = uploadMeta.safeParse({ alt: form?.get("alt") ?? "", folder: form?.get("folder") ?? "", tags: form?.get("tags") ?? "" });
@@ -64,8 +71,14 @@ export async function media(req: Request, actor: Identity, id?: string) {
   const idValue = randomUUID();
   const filename = `${idValue}.${type.ext}`;
   const target = uploadPath(filename);
-  await mkdir(uploadsDir(), { recursive: true });
-  await writeFile(target, buffer, { flag: "wx", mode: 0o600 });
+  if (buffer.length > maxSize) return failure(413, "FILE_TOO_LARGE", "Upload a file under 4 MB.");
+  if (storage) {
+    const { error } = await storage.upload(filename, new Uint8Array(buffer), { contentType: type.mime, upsert: false });
+    if (error) return failure(502, "MEDIA_STORAGE_UNAVAILABLE", "Could not save the file to Supabase Storage.");
+  } else {
+    await mkdir(uploadsDir(), { recursive: true });
+    await writeFile(target, buffer, { flag: "wx", mode: 0o600 });
+  }
   try {
     const row = await bookingTransaction(async (tx) => {
       const item = await tx.mediaAsset.create({ data: { id: idValue, filename, mime: type.mime, size: buffer.length, ...meta.data } });
@@ -74,7 +87,8 @@ export async function media(req: Request, actor: Identity, id?: string) {
     });
     return success(row, 201);
   } catch (error) {
-    await unlink(target).catch(() => undefined);
+    if (storage) await storage.remove([filename]).catch(() => undefined);
+    else await unlink(target).catch(() => undefined);
     throw error;
   }
 }

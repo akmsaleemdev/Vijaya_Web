@@ -25,18 +25,20 @@ export function Load({ query, children }: { query: { isPending: boolean; error: 
   return children;
 }
 
-export function Form({ children, submit, label = "Save", confirm, className = "v-stack" }: {
-  children: ReactNode; submit: (data: FormData) => Promise<unknown>; label?: string; confirm?: string; className?: string;
+export function Form({ children, submit, label = "Save", confirm, resetOnSuccess = false, className = "v-stack" }: {
+  children: ReactNode; submit: (data: FormData) => Promise<unknown>; label?: string; confirm?: string; resetOnSuccess?: boolean; className?: string;
 }) {
   const client = useQueryClient();
   const [busy, setBusy] = useState(false);
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (confirm && !window.confirm(confirm)) return;
-    const data = new FormData(event.currentTarget);
+    const form = event.currentTarget;
+    const data = new FormData(form);
     setBusy(true);
     try {
       await submit(data);
+      if (resetOnSuccess) form.reset();
       toast.success("Saved");
       await client.invalidateQueries({ queryKey: ["admin"] });
     } catch (error) {

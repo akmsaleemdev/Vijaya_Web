@@ -1,3 +1,4 @@
+import { bookingMode } from "@/lib/payments/settings";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { confirmIn } from "@/lib/availability";
@@ -7,11 +8,11 @@ const callback = z.object({ providerRef: z.string().min(1).max(100), outcome: z.
 
 /** Sandbox simulation. The configured production gateway must provide its own verified callback. */
 export async function POST(req: Request) {
-  if (process.env.ENABLE_SANDBOX_PAYMENTS !== "true") return Response.json({ error: "Sandbox payments are disabled." }, { status: 403 });
   const parsed = callback.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return Response.json({ error: "Invalid payment callback." }, { status: 422 });
   const { providerRef, outcome } = parsed.data;
   return bookingTransaction(async (tx) => {
+    if ((await bookingMode(tx)) !== "SANDBOX") return Response.json({ error: "Sandbox payments are disabled." }, { status: 403 });
     const payment = await tx.payment.findUnique({ where: { providerRef }, include: { booking: true } });
     if (!payment || payment.provider !== "SANDBOX") return Response.json({ error: "Payment not found." }, { status: 404 });
     if (payment.status === "SUCCESS" || payment.status === "FAILED" || payment.status === "REFUNDED") {

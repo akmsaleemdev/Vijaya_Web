@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { closeSync, mkdtempSync, openSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, before, test } from "node:test";
@@ -17,7 +17,12 @@ test("slot arithmetic treats adjacent intervals as free and detects partial/full
 });
 
 const directory = mkdtempSync(path.join(tmpdir(), "vijaya-test-"));
-const database = path.join(directory, "test.db");
+const database = process.env.CMS_TEST_DATABASE_URL;
+const testUrl = database && new URL(database);
+if (!testUrl || !["localhost", "127.0.0.1", "[::1]"].includes(testUrl.hostname) ||
+    !testUrl.pathname.endsWith("_test") || testUrl.searchParams.get("schema") !== "vijaya") {
+  throw new Error("Set CMS_TEST_DATABASE_URL to an empty local PostgreSQL database ending in _test with schema=vijaya.");
+}
 const base = `http://localhost:${process.env.CMS_TEST_PORT ?? "3713"}`;
 const port = new URL(base).port;
 const bootstrap = process.env.CMS_TEST_BOOTSTRAP_PASSWORD ?? randomBytes(18).toString("hex");
@@ -25,20 +30,29 @@ const newPassword = randomBytes(18).toString("hex");
 const email = process.env.CMS_TEST_BOOTSTRAP_EMAIL ?? "integration@example.test";
 const cron = randomBytes(24).toString("hex");
 const env = {
-  ...process.env, DATABASE_URL: "file:" + database, NEXTAUTH_URL: base, NEXTAUTH_SECRET: randomBytes(32).toString("hex"),
+  ...process.env, DATABASE_URL: database, DIRECT_URL: database, NEXTAUTH_URL: base, NEXTAUTH_SECRET: randomBytes(32).toString("hex"),
   SEED_ADMIN_EMAIL: email, SEED_ADMIN_PASSWORD: bootstrap, CRON_SECRET: cron, ENABLE_SANDBOX_PAYMENTS: "true",
+  PAYMENT_CONFIG_ENCRYPTION_KEY: randomBytes(32).toString("hex"),
   UPLOADS_DIR: path.join(directory, "uploads"), PORT: port, HOSTNAME: "0.0.0.0", SEED_DEMO_DATA: "false",
 };
 let server: ReturnType<typeof spawn> | undefined;
 let bootLog = "";
 before(async () => {
-  closeSync(openSync(database, "wx"));
   const cli = process.platform === "win32" ? "npm.cmd" : "npm";
-  for (const script of ["db:deploy", "db:seed"]) {
+  const run = (script: string) => {
     const result = spawnSync(cli, ["run", script], { env, encoding: "utf8", shell: process.platform === "win32" });
     assert.equal(result.status, 0, result.stderr || result.stdout);
+  };
+  run("db:deploy");
+  const { PrismaClient } = await import("@prisma/client");
+  const prisma = new PrismaClient({ datasourceUrl: database });
+  try {
+    assert.equal(await prisma.adminUser.count(), 0, "Use a fresh test database.");
+  } finally {
+    await prisma.$disconnect();
   }
-  server = spawn(process.execPath, [".next/standalone/server.js"], { env, stdio: ["ignore", "pipe", "pipe"] });
+  run("db:seed");
+  server = spawn(process.execPath, [".next/standalone/server.js"], { env: { ...env, DIRECT_URL: undefined }, stdio: ["ignore", "pipe", "pipe"] });
   server.stdout?.on("data", (chunk) => { bootLog += String(chunk); });
   server.stderr?.on("data", (chunk) => { bootLog += String(chunk); });
   for (let count = 0; count < 90; count++) {
@@ -46,7 +60,7 @@ before(async () => {
     if (server.exitCode !== null) break;
     await new Promise((resolve) => setTimeout(resolve, 350));
   }
-  assert.fail("The standalone site did not start. Run npm run build before tests.\n" + bootLog);
+  assert.fail("The standalone site did not start. Run npm run build:standalone before tests.\n" + bootLog);
 }, { timeout: 60_000 });
 after(() => {
   server?.kill();
@@ -120,15 +134,43 @@ test("standalone CMS authentication, atomic booking and publishing", { timeout: 
   const prisma = new PrismaClient({ datasourceUrl: env.DATABASE_URL });
   try {
     await prisma.booking.update({ where: { reference: first.reference }, data: { holdExpiresAt: new Date(Date.now() - 1000) } });
-    await assert.rejects(prisma.slotState.create({ data: { spaceId: "periyar", date: baseBooking.date, slot: "DIRECT_TEST", startMinute: 1100, endMinute: 1150, status: "CONFIRMED" } }), /SLOT_UNAVAILABLE|constraint/i);
+    await assert.rejects(
+      prisma.$executeRaw`INSERT INTO "SlotState" ("id", "spaceId", "date", "slot", "startMinute", "endMinute", "status", "updatedAt")
+        VALUES ('test-conflict', 'periyar', ${baseBooking.date}, 'DIRECT_TEST', 1100, 1150, 'CONFIRMED', NOW())`,
+      (error: unknown) => !!error && typeof error === "object" && "meta" in error &&
+        !!error.meta && typeof error.meta === "object" && "code" in error.meta && error.meta.code === "23P01",
+    );
   } finally {
     await prisma.$disconnect();
   }
   assert.equal((await api("/api/internal/expire-holds", "POST", undefined, undefined, { authorization: `Bearer ${cron}` })).status, 200);
   const replacementHold = await api("/api/booking/hold", "POST", { ...baseBooking, date: expiryDate });
   assert.equal(replacementHold.status, 200);
-  const { reference } = await replacementHold.json();
-  assert.equal((await api("/api/booking/checkout", "POST", { reference, ...manual.customer, acceptTerms: true })).status, 200);
+  const { reference: offlineRef } = await replacementHold.json();
+  const offlineReply = await api("/api/booking/checkout", "POST", { reference: offlineRef, ...manual.customer, acceptTerms: true });
+  assert.equal(offlineReply.status, 200, await offlineReply.clone().text());
+  assert.equal((await offlineReply.json()).status, "PENDING_APPROVAL");
+  assert.equal((await api("/api/payment/initiate", "POST", { reference: offlineRef })).status, 403);
+  assert.equal((await api("/book/sandbox-gateway")).status, 404);
+  assert.equal((await api("/api/booking/hold", "POST", { ...baseBooking, date: expiryDate })).status, 409);
+  const offlineAdmin = "/api/admin/bookings/" + offlineRef;
+  assert.equal((await api(offlineAdmin, "PATCH", { action: "CONFIRM" }, admin)).status, 200);
+  const confirmedOffline = await api(offlineAdmin, "GET", undefined, admin).then((reply) => reply.json());
+  assert.equal(confirmedOffline.data.status, "CONFIRMED");
+  assert.equal(confirmedOffline.data.payments.length, 0);
+
+  const saveKeys = { action: "SAVE_TEST_KEYS", provider: "STRIPE", keyId: "pk_test_UnitOnly", secret: "sk_test_UnitOnly", webhookSecret: "unit-test-fixture" };
+  assert.equal((await api("/api/admin/gateways", "POST", saveKeys, admin)).status, 200);
+  const gatewaySettings = await api("/api/admin/gateways", "GET", undefined, admin).then((reply) => reply.text());
+  assert.doesNotMatch(gatewaySettings, /sk_test_UnitOnly|unit-test-fixture|pk_test_UnitOnly/);
+  assert.equal((await api("/api/admin/gateways", "POST", { action: "SETTINGS", mode: "SANDBOX", provider: "RAZORPAY" }, admin)).status, 200);
+
+  const sandboxHold = await api("/api/booking/hold", "POST", { ...baseBooking, date: future(8) });
+  assert.equal(sandboxHold.status, 200);
+  const { reference } = await sandboxHold.json();
+  const readyToPay = await api("/api/booking/checkout", "POST", { reference, ...manual.customer, acceptTerms: true });
+  assert.equal(readyToPay.status, 200);
+  assert.equal((await readyToPay.json()).status, "PENDING_PAYMENT");
   const intent = await api("/api/payment/initiate", "POST", { reference }, undefined, { "Idempotency-Key": "checkout-test" });
   assert.equal(intent.status, 200, await intent.clone().text());
   const { providerRef } = await intent.json();

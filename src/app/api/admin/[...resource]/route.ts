@@ -1,4 +1,5 @@
 import { bookingDocument } from "@/lib/admin/documents";
+import { gateways } from "@/lib/admin/gateways";
 import { db } from "@/lib/db";
 import { access, failure, guard, success } from "@/lib/admin/http";
 import { blockDates, bookings, createBooking, updateBooking } from "@/lib/admin/bookings";
@@ -10,6 +11,7 @@ import { notifications, payments } from "@/lib/admin/finance";
 const resources = {
   "booking-venues": { GET: access.bookings },
   "booking-documents": { GET: access.bookings },
+  gateways: { GET: access.owner, POST: access.owner },
   dashboard: { GET: access.bookings },
   bookings: { GET: access.bookings, POST: access.operations, PATCH: access.operations },
   calendar: { GET: access.bookings },
@@ -39,6 +41,7 @@ async function handler(req: Request, { params }: { params: Promise<{ resource: s
     switch (resource) {
       case "booking-venues": return success(await db.space.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }));
       case "booking-documents": return await bookingDocument(req, id);
+      case "gateways": return await gateways(req, actor);
       case "dashboard": return await dashboard();
       case "bookings":
         if (req.method === "GET") return await bookings(req, actor, id);

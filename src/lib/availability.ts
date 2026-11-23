@@ -4,8 +4,8 @@
  * CORE RULES (non-negotiable):
  * - Availability validation ALWAYS happens here, server-side. Never in the browser.
  * - A date/slot booked offline or online can never become available to another customer.
- * - Temporary holds are created atomically (SQLite write serialization + unique
- *   constraint on spaceId/date/slot gives race-free double-booking protection).
+ * - PostgreSQL transactions and a range exclusion constraint prevent
+ *   overlapping holds and bookings, even across application instances.
  * - Availability is revalidated immediately before payment.
  * - All online + offline (CRM) bookings converge on the same SlotState table.
  *
@@ -251,7 +251,9 @@ export async function confirmIn(tx: Prisma.TransactionClient, reference: string,
   const booking = await tx.booking.findUnique({ where: { reference } });
   if (!booking) return false;
   if (booking.status === "CONFIRMED") return true;
-  if (!heldStatuses.includes(booking.status) || !booking.holdExpiresAt || booking.holdExpiresAt <= new Date()) return false;
+  const awaitingStaff = booking.status === "PENDING_APPROVAL" && !!options.actorId;
+  const activeHold = heldStatuses.includes(booking.status) && booking.holdExpiresAt && booking.holdExpiresAt > new Date();
+  if (!awaitingStaff && !activeHold) return false;
   const locks = await tx.slotState.count({ where: { bookingRef: reference, source: { in: ["ONLINE", "OPS"] } } });
   if (locks !== physicalSpaces(booking.spaceId).length) return false;
   await tx.booking.update({ where: { id: booking.id }, data: { status: "CONFIRMED", confirmedAt: new Date(), holdExpiresAt: null, crmSync: "QUEUED" } });

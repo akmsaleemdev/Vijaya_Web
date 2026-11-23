@@ -1,5 +1,11 @@
 # VIJAYA changelog
 
+## Supabase, Vercel and offline reservations
+
+- Switched Prisma to Supabase PostgreSQL with a private schema and an exclusion constraint for overlapping venue sessions. Archived SQLite migrations and added a transactional data importer.
+- Made unpaid requests with staff approval the default booking flow. Added sandbox switching and encrypted Razorpay and Stripe test credential settings for Super Admins.
+- Added Supabase Storage for persistent CMS media on Vercel and documented migration, seeding and deployment.
+
 ## Admin CMS and booking integrity
 
 - Added `/admin/login`, `/admin/password`, and role-scoped dashboards for bookings, calendar, venues, content, media, enquiries, customers, payments, notifications, people and audit history.

@@ -162,7 +162,7 @@ export async function dashboard() {
     db.booking.findMany({ where: { holdExpiresAt: { gt: now, lte: new Date(now.getTime() + 15 * 60_000) } }, take: 10, orderBy: { holdExpiresAt: "asc" }, select: { reference: true, eventDate: true, spaceName: true, holdExpiresAt: true } }),
   ]);
   const confirmed = bookings.filter((b) => b.status === "CONFIRMED");
-  const pending = bookings.filter((b) => ["HOLD", "PENDING_PAYMENT"].includes(b.status));
+  const pending = bookings.filter((b) => ["HOLD", "PENDING_PAYMENT", "PENDING_APPROVAL"].includes(b.status));
   const group = (values: string[]) => Array.from(values.reduce((map, value) => map.set(value, (map.get(value) ?? 0) + 1), new Map<string, number>()), ([name, count]) => ({ name, count }));
   const history = bookings.filter((b) => b.eventDate >= yearAgo && ["CONFIRMED", "COMPLETED", "NO_SHOW"].includes(b.status));
   const revenue = new Map<string, number>();

@@ -1,15 +1,16 @@
+import { bookingMode } from "@/lib/payments/settings";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { bookingTransaction } from "@/lib/booking/transaction";
 
 const input = z.object({ reference: z.string().min(1).max(80).toUpperCase(), method: z.string().max(40).optional() });
 export async function POST(req: Request) {
-  if (process.env.ENABLE_SANDBOX_PAYMENTS !== "true") return Response.json({ error: "Online payment is currently unavailable. Contact the VIJAYA team." }, { status: 403 });
   const parsed = input.safeParse(await req.json().catch(() => null));
   const key = req.headers.get("Idempotency-Key");
   if (!parsed.success || (key && key.length > 128)) return Response.json({ error: "Invalid payment request." }, { status: 422 });
   const { reference, method } = parsed.data;
   return bookingTransaction(async (tx) => {
+    if ((await bookingMode(tx)) !== "SANDBOX") return Response.json({ error: "Online payment is currently unavailable. Contact the VIJAYA team." }, { status: 403 });
     const booking = await tx.booking.findUnique({ where: { reference } });
     if (!booking) return Response.json({ error: "Booking not found." }, { status: 404 });
     if (booking.status === "CONFIRMED") return Response.json({ error: "This booking is already confirmed.", alreadyConfirmed: true }, { status: 409 });

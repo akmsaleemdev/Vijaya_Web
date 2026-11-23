@@ -21,6 +21,7 @@ import { track } from "@/lib/analytics";
 
 interface BookingInfo {
   reference: string;
+  bookingMode: "OFFLINE" | "SANDBOX";
   spaceName: string;
   eventType: string;
   eventDate: string;
@@ -41,7 +42,7 @@ export function CheckoutFlow({ reference }: { reference: string }) {
 
   const [info, setInfo] = useState<BookingInfo | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [phase, setPhase] = useState<"details" | "payment" | "confirmed" | "expired" | "gone">("details");
+  const [phase, setPhase] = useState<"details" | "payment" | "requested" | "confirmed" | "expired" | "gone">("details");
   const [remaining, setRemaining] = useState<number>(0);
 
   const [f, setF] = useState({ name: "", phone: "", email: "", country: "India", notes: "", acceptTerms: false });
@@ -61,7 +62,8 @@ export function CheckoutFlow({ reference }: { reference: string }) {
       const data: BookingInfo = await res.json();
       setInfo(data);
       if (data.status === "CONFIRMED") setPhase("confirmed");
-      else if (data.status === "EXPIRED" || data.status === "CANCELLED") setPhase("expired");
+      else if (data.status === "PENDING_APPROVAL") setPhase("requested");
+      else if (["EXPIRED", "CANCELLED", "REJECTED"].includes(data.status)) setPhase("expired");
       else setPhase(data.status === "PENDING_PAYMENT" ? "payment" : "details");
     } catch {
       setLoadError("We couldn't reach the booking service. Please refresh to try again.");
@@ -116,8 +118,8 @@ export function CheckoutFlow({ reference }: { reference: string }) {
         setServerError({ message: data.error || data.message || "Checkout failed." });
         return;
       }
-      setPhase("payment");
-      setInfo((v) => v ? { ...v, status: "PENDING_PAYMENT" } : v);
+      setPhase(data.status === "CONFIRMED" ? "confirmed" : data.status === "PENDING_APPROVAL" ? "requested" : "payment");
+      setInfo((v) => v ? { ...v, status: data.status } : v);
     } catch {
       setServerError({ message: "We couldn't reach the booking service. Please try again." });
     } finally {
@@ -224,7 +226,7 @@ export function CheckoutFlow({ reference }: { reference: string }) {
                     )}
                   </div>
                   <p className="mt-2 text-[12px] text-stone">
-                    Your venue is temporarily reserved while you complete payment.
+                    Your venue is temporarily held while you submit your details.
                   </p>
                   <div className="mt-7 grid gap-5 sm:grid-cols-2">
                     <div>
@@ -277,7 +279,7 @@ export function CheckoutFlow({ reference }: { reference: string }) {
 
                   <button type="submit" disabled={sending} className="btn-primary mt-7 w-full sm:w-auto disabled:opacity-60">
                     {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Lock className="h-4 w-4" />}
-                    <span>{sending ? "Saving details" : "Continue to Payment"}</span>
+                    <span>{sending ? "Saving details" : info.bookingMode === "OFFLINE" ? "Submit Booking Request" : "Continue to Payment"}</span>
                     <ArrowRight className="h-4 w-4" />
                   </button>
                 </form>
@@ -325,16 +327,28 @@ export function CheckoutFlow({ reference }: { reference: string }) {
               <dl className="space-y-2.5 text-[13px]">
                 <Row label="Base rent (sample)" value={inr(info.amounts.base)} />
                 {info.amounts.weekendUplift > 0 && <Row label="Weekend uplift" value={inr(info.amounts.weekendUplift)} />}
-                <Row label="Taxes (sample 12%)" value={inr(info.amounts.tax)} />
-                <Row label="Token / deposit now" value={inr(info.amounts.totalPayable)} strong />
-                <Row label="Balance due later" value={inr(info.amounts.totalContract - info.amounts.deposit)} muted />
+                <Row label="Estimated taxes" value={inr(info.amounts.tax)} />
+                {info.bookingMode === "SANDBOX"
+                  ? <Row label="Sandbox deposit" value={inr(info.amounts.totalPayable)} strong />
+                  : <Row label="Estimated total" value={inr(info.amounts.totalContract)} strong />}
               </dl>
               <p className="mt-4 text-[11px] leading-5 text-stone/80">
-                Sample pricing pending VIJAYA approval. All charges are shown before payment — no hidden additions.
+                {info.bookingMode === "OFFLINE" ? "No online payment is due. VIJAYA will confirm pricing and arrangements." : "Sandbox prices are for demonstration."}
               </p>
             </div>
           </aside>
         </div>
+      )}
+
+      {phase === "requested" && (
+        <section className="card-editorial p-8 md:p-10 max-w-xl mx-auto text-center">
+          <CheckCircle2 className="h-10 w-10 mx-auto text-gold" aria-hidden />
+          <h2 className="h-sub mt-4">Booking request received</h2>
+          <p className="mt-3 text-stone">The VIJAYA team will review your request for {info.spaceName} on {prettyDate(info.eventDate)}.</p>
+          <p className="mt-4 font-medium">Booking reference {info.reference}</p>
+          <p className="mt-2 text-sm text-stone">No online payment is due.</p>
+          <Link className="btn-primary mt-6" href="/my-vijaya">Track in My VIJAYA</Link>
+        </section>
       )}
 
       {/* ------------------------------------------------------- CONFIRMED */}
@@ -355,12 +369,12 @@ export function CheckoutFlow({ reference }: { reference: string }) {
                 <Row label="Date" value={prettyDate(info.eventDate)} />
                 <Row label="Slot" value={slotLabel} />
                 <Row label="Guests" value={String(info.guests)} />
-                <Row label="Payment status" value={info.payments.some((p) => p.status === "SUCCESS") ? "Paid (sandbox)" : "Pending"} />
+                <Row label="Payment status" value={info.payments.some((p) => p.status === "SUCCESS") ? "Payment recorded" : "Arranged with VIJAYA"} />
                 <Row label="CRM sync" value={info.crmSync === "QUEUED" ? "Queued — will sync when CRM connects" : info.crmSync} />
               </dl>
               <div className="hairline-t mt-8 pt-6 flex flex-wrap gap-4">
                 <Link href="/my-vijaya" className="btn-primary"><span>Access My VIJAYA</span></Link>
-                <button onClick={() => window.print()} className="btn-outline"><Printer className="h-4 w-4" /><span>Print Receipt</span></button>
+                <button onClick={() => window.print()} className="btn-outline"><Printer className="h-4 w-4" /><span>Print Booking</span></button>
                 <Link href="/contact" className="btn-outline"><span>Contact VIJAYA</span></Link>
               </div>
               <p className="mt-6 text-[12px] leading-6 text-stone">

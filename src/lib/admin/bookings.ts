@@ -4,7 +4,7 @@ import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { confirmIn, createTemporaryHold } from "@/lib/availability";
 import { dates, holdInput, indiaDate } from "@/lib/booking/slots";
-import { cancelIn, expireIn, heldStatuses, isSlotConflict, physicalSpaces, reserve, slotRange } from "@/lib/booking/state";
+import { cancelIn, expireIn, pendingStatuses, isSlotConflict, physicalSpaces, reserve, slotRange } from "@/lib/booking/state";
 import { bookingTransaction } from "@/lib/booking/transaction";
 import { spreadsheet } from "./spreadsheet";
 import { audit, failure, success, type Identity } from "./http";
@@ -102,7 +102,7 @@ export async function updateBooking(req: Request, actor: Identity, reference: st
           break;
         case "CANCEL":
         case "REJECT":
-          if (!heldStatuses.includes(booking.status) && !(action.action === "CANCEL" && booking.status === "CONFIRMED")) return conflict();
+          if (!pendingStatuses.includes(booking.status) && !(action.action === "CANCEL" && booking.status === "CONFIRMED")) return conflict();
           await cancelIn(tx, booking, action.action === "CANCEL" ? "CANCELLED" : "REJECTED", action.reason, actor.admin.id, actor.ip);
           break;
         case "COMPLETE":
@@ -114,7 +114,7 @@ export async function updateBooking(req: Request, actor: Identity, reference: st
           break;
         }
         case "RESCHEDULE": {
-          if (![...heldStatuses, "CONFIRMED"].includes(booking.status)) return conflict();
+          if (![...pendingStatuses, "CONFIRMED"].includes(booking.status)) return conflict();
           const space = await tx.space.findUnique({ where: { id: action.venue } });
           const range = space?.active && await slotRange(tx, action.venue, action.slot);
           if (!space || !range || action.date < indiaDate() || (space.capacityMin ?? 0) > booking.guests || (space.capacityMax ?? Infinity) < booking.guests) {
