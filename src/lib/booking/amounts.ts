@@ -1,6 +1,4 @@
-import type { Prisma } from "@prisma/client";
-
-export type Money = number | Prisma.Decimal;
+export type Money = number;
 type BookingPrice = { baseAmount: Money; weekendUplift: Money; taxAmount: Money; depositAmount: Money; totalPayable: Money };
 
 export function totalContract(row: Pick<BookingPrice, "baseAmount" | "weekendUplift" | "taxAmount">) {

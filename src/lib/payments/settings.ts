@@ -1,9 +1,12 @@
-import type { Prisma } from "@prisma/client";
-import { db } from "@/lib/db";
+import { getPool, type DbExecutor } from "@/lib/db";
 
 export const paymentSettingsId = "website";
-export async function bookingMode(client: Pick<Prisma.TransactionClient, "paymentSettings"> = db) {
+export async function bookingMode(client: DbExecutor = getPool()) {
   if (process.env.ENABLE_SANDBOX_PAYMENTS !== "true") return "OFFLINE";
-  const settings = await client.paymentSettings.findUnique({ where: { id: paymentSettingsId }, select: { mode: true } });
+  const { rows } = await client.query<{ mode: string }>(
+    `SELECT "mode" FROM vijaya."PaymentSettings" WHERE "id" = $1`,
+    [paymentSettingsId],
+  );
+  const settings = rows[0];
   return settings?.mode === "SANDBOX" ? "SANDBOX" : "OFFLINE";
 }

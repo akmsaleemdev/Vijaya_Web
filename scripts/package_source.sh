@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Package the complete VIJAYA website source code into a tar.gz archive.
-# Includes: src, public (media + brand), scripts, prisma, tests, examples,
+# Includes: src, public (media + brand), scripts, supabase migrations, tests, examples,
 #           root configs, README.md, .env.example
 # Excludes: node_modules, .next, .git, download, upload, skills, tool-results,
 #           .zscripts, mini-services, the production SQLite DB (db/*.db — may
-#           contain customer PII; recreate via prisma), the real .env, logs.
+#           contain customer PII; recreate via SQL migrations), the real .env, logs.
 set -euo pipefail
 cd /home/z/my-project
 OUT="download/vijaya-website-source.tar.gz"
@@ -27,7 +27,7 @@ tar -czf "$OUT" \
   --exclude='server.log' \
   --exclude='*.log' \
   --exclude='.DS_Store' \
-  src public scripts prisma tests examples \
+  src public scripts supabase tests examples \
   .env.example README.md .gitignore \
   package.json next.config.ts tsconfig.json tailwind.config.ts \
   components.json next-env.d.ts postcss.config.mjs eslint.config.mjs
@@ -42,7 +42,7 @@ echo "=== File count by top-level dir ==="
 tar -tzf "$OUT" | awk -F/ 'NF>1{print $1} NF==1{print "(root file)"}' | sort | uniq -c | sort -rn
 echo ""
 echo "=== Sanity checks ==="
-for f in src/app/\(site\)/page.tsx src/components/media/hero-background.tsx src/lib/fonts.ts next.config.ts package.json prisma/schema.prisma README.md .env.example public/media/vijaya-hero-desktop.mp4 public/media/vijaya-hero-mobile.mp4 public/brand/vijaya-logo-gold.png; do
+for f in src/app/\(site\)/page.tsx src/components/media/hero-background.tsx src/lib/fonts.ts next.config.ts package.json supabase/migrations/202611230003_postgres_baseline.sql README.md .env.example public/media/vijaya-hero-desktop.mp4 public/media/vijaya-hero-mobile.mp4 public/brand/vijaya-logo-gold.png; do
   if tar -tzf "$OUT" | grep -q "^$f"; then echo "  ✓ $f"; else echo "  ✗ MISSING: $f"; fi
 done
 echo ""

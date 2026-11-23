@@ -3,9 +3,10 @@ import { mkdir, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import sharp from "sharp";
 import { z } from "zod";
-import { db } from "@/lib/db";
+import { query } from "@/lib/db";
 import { bookingTransaction } from "@/lib/booking/transaction";
 import { audit, failure, success, type Identity } from "./http";
+import type { MediaAsset } from "@/lib/db/types";
 
 import { documentsBucket, siteMediaBucket, supabaseMedia } from "@/lib/media/remote-storage";
 import { assetId, uploadsDir, uploadPath } from "@/lib/media/upload-storage";
@@ -20,19 +21,27 @@ function sniff(buffer: Buffer) {
 }
 
 export async function media(req: Request, actor: Identity, id?: string) {
-  if (req.method === "GET") return success(await db.mediaAsset.findMany({ orderBy: { createdAt: "desc" }, take: 300 }));
+  if (req.method === "GET") {
+    const { rows } = await query<MediaAsset>(`SELECT * FROM vijaya."MediaAsset" ORDER BY "createdAt" DESC LIMIT 300`);
+    return success(rows);
+  }
   if (req.method === "DELETE") {
     if (!assetId.safeParse(id).success) return failure(422, "INVALID_FILE", "Choose a valid file.");
     const removed = await bookingTransaction(async (tx) => {
-      const row = await tx.mediaAsset.findUnique({ where: { id } });
+      const { rows: [row] } = await tx.query<MediaAsset>(`SELECT * FROM vijaya."MediaAsset" WHERE "id" = $1`, [id]);
       if (!row) return failure(404, "NOT_FOUND", "File not found.");
       const contains = `/api/media/${row.id}.`;
-      const references = await tx.$queryRaw<{ used: boolean }[]>`
-        SELECT EXISTS (SELECT 1 FROM "ContentEntry" WHERE strpos(draft::text, ${contains}) > 0 OR strpos(published::text, ${contains}) > 0
-          UNION ALL SELECT 1 FROM "ContentVersion" WHERE strpos(payload::text, ${contains}) > 0) AS used
-      `;
-      if (references[0]?.used) return failure(409, "MEDIA_IN_USE", "The file is referenced by current content or saved history.");
-      await tx.mediaAsset.delete({ where: { id } });
+      const { rows: [references] } = await tx.query<{ used: boolean }>(
+        `SELECT EXISTS (
+           SELECT 1 FROM vijaya."ContentEntry"
+           WHERE strpos("draft"::text, $1) > 0 OR strpos("published"::text, $1) > 0
+           UNION ALL
+           SELECT 1 FROM vijaya."ContentVersion" WHERE strpos("payload"::text, $1) > 0
+         ) AS used`,
+        [contains],
+      );
+      if (references?.used) return failure(409, "MEDIA_IN_USE", "The file is referenced by current content or saved history.");
+      await tx.query(`DELETE FROM vijaya."MediaAsset" WHERE "id" = $1`, [id]);
       await audit(tx, actor, "MEDIA_DELETED", "MediaAsset", row.id, row);
       return row;
     });
@@ -86,7 +95,13 @@ export async function media(req: Request, actor: Identity, id?: string) {
   }
   try {
     const row = await bookingTransaction(async (tx) => {
-      const item = await tx.mediaAsset.create({ data: { id: idValue, filename, mime: type.mime, size: buffer.length, storageBucket: storage ? bucket : null, version, ...meta.data } });
+      const { rows: [item] } = await tx.query<MediaAsset>(
+        `INSERT INTO vijaya."MediaAsset"
+          ("id", "filename", "mime", "size", "storageBucket", "version", "alt", "folder", "tags", "createdAt")
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,now()) RETURNING *`,
+        [idValue, filename, type.mime, buffer.length, storage ? bucket : null, version, meta.data.alt, meta.data.folder, meta.data.tags],
+      );
+      if (!item) throw new Error("Media insert returned no row.");
       await audit(tx, actor, "MEDIA_UPLOADED", "MediaAsset", item.id, undefined, item);
       return item;
     });

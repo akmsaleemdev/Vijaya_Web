@@ -1,7 +1,7 @@
 DO $$
 BEGIN
   IF current_schema() <> 'vijaya' THEN
-    RAISE EXCEPTION 'Use schema=vijaya in both Prisma connection URLs.';
+    RAISE EXCEPTION 'Connect with schema=vijaya in the PostgreSQL connection URL.';
   END IF;
 END $$;
 
@@ -450,7 +450,7 @@ DO $$
 DECLARE relation record;
 BEGIN
   FOR relation IN SELECT tablename FROM pg_tables
-    WHERE schemaname = 'vijaya' AND tablename <> '_prisma_migrations'
+    WHERE schemaname = 'vijaya' AND tablename <> '_app_migrations'
   LOOP
     EXECUTE format('ALTER TABLE vijaya.%I ENABLE ROW LEVEL SECURITY', relation.tablename);
   END LOOP;

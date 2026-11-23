@@ -1,13 +1,19 @@
 import { Document, HeadingLevel, Packer, Paragraph, TextRun } from "docx";
-import { db } from "@/lib/db";
+import { query } from "@/lib/db";
 import { contract, paid } from "./bookings";
 import { failure } from "./http";
 import { inr } from "@/lib/pricing";
+import type { Booking, Payment } from "@/lib/db/types";
 
 export async function bookingDocument(req: Request, reference?: string) {
   const type = new URL(req.url).searchParams.get("type");
   if (!reference || (type !== "invoice" && type !== "confirmation")) return failure(422, "INVALID_DOCUMENT", "Choose a booking and document type.");
-  const booking = await db.booking.findUnique({ where: { reference }, include: { payments: true } });
+  const { rows: [booking] } = await query<Booking & { payments: Payment[] }>(
+    `SELECT b.*,
+       COALESCE((SELECT json_agg(p) FROM vijaya."Payment" p WHERE p."bookingId" = b."id"), '[]'::json) AS payments
+     FROM vijaya."Booking" b WHERE b."reference" = $1`,
+    [reference],
+  );
   if (!booking) return failure(404, "NOT_FOUND", "Booking not found.");
   if (type === "confirmation" && !["CONFIRMED", "COMPLETED", "NO_SHOW"].includes(booking.status)) return failure(409, "NOT_CONFIRMED", "The booking is not confirmed.");
   const balance = contract(booking) - paid(booking.payments);

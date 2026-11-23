@@ -2,7 +2,8 @@ import { createHash, randomUUID } from "node:crypto";
 import { compare } from "bcryptjs";
 import { getServerSession, type NextAuthOptions } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
-import { db } from "@/lib/db";
+import { query } from "@/lib/db";
+import type { AdminSession, AdminUser, LoginAttempt } from "@/lib/db/types";
 import { bookingTransaction } from "@/lib/booking/transaction";
 import { z } from "zod";
 
@@ -36,27 +37,44 @@ export const authOptions: NextAuthOptions = {
       const keys = [hash("email:" + email), hash("ip:" + ip)];
       const now = new Date();
       const allowed = await bookingTransaction(async (tx) => {
-        const attempts = await tx.loginAttempt.findMany({ where: { key: { in: keys } } });
+        const { rows: attempts } = await tx.query<LoginAttempt>(
+          `SELECT * FROM vijaya."LoginAttempt" WHERE "key" = ANY($1::text[])`,
+          [keys],
+        );
         if (attempts.some((item) => item.failures >= 5 && item.resetAt > now)) return false;
         for (const key of keys) {
           const item = attempts.find((attempt) => attempt.key === key);
           const next = { failures: item && item.resetAt > now ? item.failures + 1 : 1, resetAt: new Date(now.getTime() + lockMs) };
-          await tx.loginAttempt.upsert({ where: { key }, create: { key, ...next }, update: next });
+          await tx.query(
+            `INSERT INTO vijaya."LoginAttempt" ("key", "failures", "resetAt")
+             VALUES ($1, $2, $3)
+             ON CONFLICT ("key") DO UPDATE SET "failures" = EXCLUDED."failures", "resetAt" = EXCLUDED."resetAt"`,
+            [key, next.failures, next.resetAt],
+          );
         }
         return true;
       });
       if (!allowed) return null;
-      const user = await db.adminUser.findUnique({ where: { email } });
+      const { rows: [user] } = await query<AdminUser>(
+        `SELECT * FROM vijaya."AdminUser" WHERE "email" = $1`,
+        [email],
+      );
       // A dummy bcrypt hash keeps unknown accounts on the same verification path.
       const dummyHash = "$2b$12$5gY2G.ikaoM/aWqElvT3ee7WSpnR.2a2hMtzVDh2BDbB0KMHwIB2O";
       const matches = await compare(password, user?.passwordHash ?? dummyHash);
       if (!matches || !user || user.disabled || !roles.safeParse(user.role).success) return null;
       const sessionId = randomUUID();
       await bookingTransaction(async (tx) => {
-        await tx.loginAttempt.deleteMany({ where: { key: keys[0] } });
-        await tx.loginAttempt.updateMany({ where: { key: keys[1], failures: { gt: 0 } }, data: { failures: { decrement: 1 } } });
-        await tx.adminSession.deleteMany({ where: { expiresAt: { lte: now } } });
-        await tx.adminSession.create({ data: { id: sessionId, adminId: user.id, lastSeenAt: now, expiresAt: new Date(now.getTime() + maxAge * 1000) } });
+        await tx.query(`DELETE FROM vijaya."LoginAttempt" WHERE "key" = $1`, [keys[0]]);
+        await tx.query(
+          `UPDATE vijaya."LoginAttempt" SET "failures" = "failures" - 1 WHERE "key" = $1 AND "failures" > 0`,
+          [keys[1]],
+        );
+        await tx.query(`DELETE FROM vijaya."AdminSession" WHERE "expiresAt" <= $1`, [now]);
+        await tx.query(
+          `INSERT INTO vijaya."AdminSession" ("id", "adminId", "lastSeenAt", "expiresAt") VALUES ($1, $2, $3, $4)`,
+          [sessionId, user.id, now, new Date(now.getTime() + maxAge * 1000)],
+        );
       });
       return { id: user.id, email: user.email, name: user.name, sessionId, sessionVersion: user.sessionVersion };
     },
@@ -75,7 +93,9 @@ export const authOptions: NextAuthOptions = {
   },
   events: {
     async signOut({ token }) {
-      if (typeof token.adminSession === "string") await db.adminSession.deleteMany({ where: { id: token.adminSession } });
+      if (typeof token.adminSession === "string") {
+        await query(`DELETE FROM vijaya."AdminSession" WHERE "id" = $1`, [token.adminSession]);
+      }
     },
   },
 };
@@ -87,18 +107,25 @@ export async function currentAdmin() {
   if (!claims.success) return null;
   const { adminId, adminSession, version } = claims.data;
   const [user, stored] = await Promise.all([
-    db.adminUser.findUnique({ where: { id: adminId }, select: {
-      id: true, name: true, email: true, role: true, disabled: true, sessionVersion: true, mustChangePassword: true,
-    } }),
-    db.adminSession.findUnique({ where: { id: adminSession } }),
+    query<Pick<AdminUser, "id" | "name" | "email" | "role" | "disabled" | "sessionVersion" | "mustChangePassword">>(
+      `SELECT "id", "name", "email", "role", "disabled", "sessionVersion", "mustChangePassword"
+       FROM vijaya."AdminUser" WHERE "id" = $1`,
+      [adminId],
+    ),
+    query<AdminSession>(`SELECT * FROM vijaya."AdminSession" WHERE "id" = $1`, [adminSession]),
   ]);
-  const role = roles.safeParse(user?.role);
+  const admin = user.rows[0];
+  const session = stored.rows[0];
+  const role = roles.safeParse(admin?.role);
   const now = new Date();
-  if (!user || !role.success || user.disabled || user.sessionVersion !== version ||
-      !stored || stored.adminId !== adminId || stored.expiresAt <= now ||
-      now.getTime() - stored.lastSeenAt.getTime() >= idleMs) return null;
-  if (now.getTime() - stored.lastSeenAt.getTime() >= 60_000) {
-    await db.adminSession.updateMany({ where: { id: adminSession }, data: { lastSeenAt: now } });
+  if (!admin || !role.success || admin.disabled || admin.sessionVersion !== version ||
+      !session || session.adminId !== adminId || session.expiresAt <= now ||
+      now.getTime() - session.lastSeenAt.getTime() >= idleMs) return null;
+  if (now.getTime() - session.lastSeenAt.getTime() >= 60_000) {
+    await query(
+      `UPDATE vijaya."AdminSession" SET "lastSeenAt" = $2 WHERE "id" = $1`,
+      [adminSession, now],
+    );
   }
-  return { ...user, role: role.data };
+  return { ...admin, role: role.data };
 }

@@ -1,7 +1,8 @@
 import { cache } from "react";
 import { unstable_cache } from "next/cache";
 import { draftMode, headers } from "next/headers";
-import { db } from "@/lib/db";
+import { query } from "@/lib/db";
+import type { ContentEntry } from "@/lib/db/types";
 import { contentTag, CONTENT_TAG, COPY_BUNDLE_TAG } from "./tags";
 import { copyFrom, type CopyBundle, type CopyValues } from "./copy";
 import clientScopes from "./client-scopes.json";
@@ -27,10 +28,12 @@ const canSeeDraft = cache(async () => {
 });
 
 function selectValues(key: string, locale: string, preview = false) {
-  return db.contentEntry.findMany({
-    where: { key, locale: { in: locale === "en" ? ["en"] : [locale, "en"] } },
-    select: preview ? { locale: true, draft: true, published: true } : { locale: true, published: true },
-  });
+  const locales = locale === "en" ? ["en"] : [locale, "en"];
+  return query<Pick<ContentEntry, "locale" | "draft" | "published">>(
+    `SELECT "locale", "draft", "published" FROM vijaya."ContentEntry"
+     WHERE "key" = $1 AND "locale" = ANY($2::text[])`,
+    [key, locales],
+  ).then(({ rows }) => rows);
 }
 
 function merge(base: unknown, localized: unknown): unknown {
@@ -86,10 +89,14 @@ export const getCopyBundle = cache(async (surface: "site" | "book" | "portal"): 
       if (surface === "portal") return key.includes(".portal.") || key.startsWith("copy.app.my-vijaya.");
       return !key.includes(".checkout.") && !key.includes(".portal.") && !key.startsWith("copy.app.book.") && !key.startsWith("copy.app.my-vijaya.");
     });
-    const find = () => db.contentEntry.findMany({ where: { key: { in: keys }, locale: { in: ["en", locale] } } });
-    const rows = preview ? await find() : await unstable_cache(find, ["vijaya-client-copy-v2", surface, locale], {
+    const find = () => query<ContentEntry>(
+      `SELECT * FROM vijaya."ContentEntry" WHERE "key" = ANY($1::text[]) AND "locale" = ANY($2::text[])`,
+      [keys, ["en", locale]],
+    );
+    const result = preview ? await find() : await unstable_cache(find, ["vijaya-client-copy-v2", surface, locale], {
       tags: [CONTENT_TAG, COPY_BUNDLE_TAG], revalidate: 5,
     })();
+    const rows = result.rows;
     return Object.fromEntries(keys.map((key) => {
       const get = (lang: string) => {
         const entry = rows.find((row) => row.key === key && row.locale === lang);

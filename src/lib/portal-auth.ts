@@ -5,7 +5,8 @@
 
 import crypto from "crypto";
 import { cookies } from "next/headers";
-import { db } from "@/lib/db";
+import { query } from "@/lib/db";
+import type { Booking, Payment, Document, Milestone } from "@/lib/db/types";
 
 const COOKIE = "vijaya_portal";
 const MAX_AGE = 60 * 60 * 24 * 7; // 7 days
@@ -49,10 +50,14 @@ export function verifySessionToken(token: string): PortalSession | null {
 /** Verify credentials: booking reference + the email on that booking. */
 export async function verifyPortalCredentials(reference: string, email: string) {
   const ref = reference.trim().toUpperCase();
-  const booking = await db.booking.findFirst({
-    where: { reference: ref, customerEmail: { equals: email.trim().toLowerCase(), }, status: { in: ["CONFIRMED", "PENDING_APPROVAL", "PENDING_PAYMENT", "PENDING_HOLD"] } },
-  });
-  return booking;
+  const { rows } = await query<Booking>(
+    `SELECT * FROM vijaya."Booking"
+     WHERE "reference" = $1 AND lower("customerEmail") = $2
+       AND "status"::text = ANY($3::text[])
+     LIMIT 1`,
+    [ref, email.trim().toLowerCase(), ["CONFIRMED", "PENDING_APPROVAL", "PENDING_PAYMENT", "PENDING_HOLD"]],
+  );
+  return rows[0] ?? null;
 }
 
 export async function setPortalCookie(reference: string, email: string) {
@@ -80,9 +85,16 @@ export async function getPortalSession(): Promise<PortalSession | null> {
 
 /** All bookings belonging to the signed-in customer (same email). */
 export async function getPortalBookings(email: string) {
-  return db.booking.findMany({
-    where: { customerEmail: email.toLowerCase(), status: { in: ["CONFIRMED", "PENDING_APPROVAL", "PENDING_PAYMENT", "PENDING_HOLD"] } },
-    include: { payments: true, documents: true, milestones: { orderBy: { order: "desc" } } },
-    orderBy: { eventDate: "desc" },
-  });
+  const { rows } = await query<Booking & { payments: Payment[]; documents: Document[]; milestones: Milestone[] }>(
+    `SELECT b.*,
+       COALESCE((SELECT json_agg(p ORDER BY p."createdAt") FROM vijaya."Payment" p WHERE p."bookingId" = b."id"), '[]'::json) AS payments,
+       COALESCE((SELECT json_agg(d ORDER BY d."createdAt") FROM vijaya."Document" d WHERE d."bookingId" = b."id"), '[]'::json) AS documents,
+       COALESCE((SELECT json_agg(m ORDER BY m."order" DESC) FROM vijaya."Milestone" m WHERE m."bookingId" = b."id"), '[]'::json) AS milestones
+     FROM vijaya."Booking" b
+     WHERE lower(b."customerEmail") = $1
+       AND b."status"::text = ANY($2::text[])
+     ORDER BY b."eventDate" DESC`,
+    [email.toLowerCase(), ["CONFIRMED", "PENDING_APPROVAL", "PENDING_PAYMENT", "PENDING_HOLD"]],
+  );
+  return rows;
 }

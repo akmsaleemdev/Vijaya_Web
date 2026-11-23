@@ -1,6 +1,6 @@
 import { bookingDocument } from "@/lib/admin/documents";
 import { gateways } from "@/lib/admin/gateways";
-import { db } from "@/lib/db";
+import { query } from "@/lib/db";
 import { access, failure, guard, success } from "@/lib/admin/http";
 import { blockDates, bookings, createBooking, updateBooking } from "@/lib/admin/bookings";
 import { content, preview } from "@/lib/admin/content";
@@ -39,7 +39,12 @@ async function handler(req: Request, { params }: { params: Promise<{ resource: s
     const actor = await guard(req, allowed);
     if (actor instanceof Response) return actor;
     switch (resource) {
-      case "booking-venues": return success(await db.space.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }));
+      case "booking-venues": {
+        const { rows } = await query<{ id: string; name: string }>(
+          `SELECT "id", "name" FROM vijaya."Space" ORDER BY "name" ASC`,
+        );
+        return success(rows);
+      }
       case "booking-documents": return await bookingDocument(req, id);
       case "gateways": return await gateways(req, actor);
       case "dashboard": return await dashboard();

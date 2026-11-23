@@ -1,10 +1,13 @@
 # VIJAYA website and CMS audit
 
+This audit records the initial implementation assessment. The current application
+uses the SQL migrations in `supabase/migrations/` and the PostgreSQL driver.
+
 Baseline: GitHub main at abfbc77. The supplied frontend preview and source agree on the homepage navigation and hero. The source contains official logos and public pages, including space detail, enquiry forms, booking checkout, and My VIJAYA.
 
 ## Data and booking
 
-| Existing Prisma model | Current responsibility |
+| Original data entity | Current responsibility |
 | --- | --- |
 | Space | Seeded venue inventory and basic booking flags |
 | SlotState | Operational occupancy, unique by space/date/slot. Named slots currently fail to model full-day overlap. |
@@ -31,7 +34,7 @@ Create a baseline migration from the original schema, then apply additive CMS ch
 
 ## Supabase live CMS audit
 
-Reviewed GitHub main at `cff58ff`, the attached SQLite-era schema and seed, the Prisma PostgreSQL migration and import path, and the admin and public booking routes. The attached files predate the CMS, role model, dual pooler configuration, overlap constraint and offline request state. They are reference material for legacy data. The repository's PostgreSQL schema and idempotent venue and Super Admin seed are the migration baseline.
+Reviewed GitHub main at `cff58ff`, the attached SQLite-era schema and seed, the PostgreSQL migration and import path, and the admin and public booking routes. The attached files predate the CMS, role model, dual pooler configuration, overlap constraint and offline request state. They are reference material for legacy data. The repository's PostgreSQL schema and idempotent venue and Super Admin seed are the migration baseline.
 
 The latest public layout reads some CMS records but the database seed creates only venue inventory and staff credentials. Shared components, venue details, root structured data and operational copy still use original source literals. `CONTENT_INVENTORY.md` records the source and public surface. The existing cache has one global tag and a 60-second TTL. CMS uploads use one private Storage bucket with a local fallback for standalone use.
 

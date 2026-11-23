@@ -5,6 +5,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, before, test } from "node:test";
+import { Pool } from "pg";
 import { indiaDate, intervals, overlaps, utcRange } from "../src/lib/booking/slots";
 
 test("slot arithmetic treats adjacent intervals as free and detects partial/full-day overlaps", () => {
@@ -44,12 +45,12 @@ before(async () => {
     assert.equal(result.status, 0, result.stderr || result.stdout);
   };
   run("db:deploy");
-  const { PrismaClient } = await import("@prisma/client");
-  const prisma = new PrismaClient({ datasourceUrl: database });
+  const pool = new Pool({ connectionString: database });
   try {
-    assert.equal(await prisma.adminUser.count(), 0, "Use a fresh test database.");
+    const { rows: [result] } = await pool.query<{ count: string }>(`SELECT count(*)::text AS count FROM vijaya."AdminUser"`);
+    assert.equal(Number(result?.count ?? 0), 0, "Use a fresh test database.");
   } finally {
-    await prisma.$disconnect();
+    await pool.end();
   }
   run("db:seed");
   server = spawn(process.execPath, [".next/standalone/server.js"], { env: { ...env, DIRECT_URL: undefined }, stdio: ["ignore", "pipe", "pipe"] });
@@ -130,29 +131,35 @@ test("standalone CMS authentication, atomic booking and publishing", { timeout: 
   const first = await api("/api/booking/hold", "POST", { ...baseBooking, date: expiryDate }, undefined, options).then((response) => response.json());
   const replay = await api("/api/booking/hold", "POST", { ...baseBooking, date: expiryDate }, undefined, options).then((response) => response.json());
   assert.equal(first.reference, replay.reference);
-  const { PrismaClient } = await import("@prisma/client");
-  const prisma = new PrismaClient({ datasourceUrl: env.DATABASE_URL });
+  const pool = new Pool({ connectionString: env.DATABASE_URL });
   try {
-    await prisma.booking.update({ where: { reference: first.reference }, data: { holdExpiresAt: new Date(Date.now() - 1000) } });
-    await assert.rejects(
-      prisma.$executeRaw`INSERT INTO "SlotState" ("id", "spaceId", "date", "slot", "startMinute", "endMinute", "status", "updatedAt")
-        VALUES ('test-conflict', 'periyar', ${baseBooking.date}, 'DIRECT_TEST', 1100, 1150, 'CONFIRMED', NOW())`,
-      (error: unknown) => !!error && typeof error === "object" && "meta" in error &&
-        !!error.meta && typeof error.meta === "object" && "code" in error.meta && error.meta.code === "23P01",
+    await pool.query(
+      `UPDATE vijaya."Booking" SET "holdExpiresAt" = $2 WHERE "reference" = $1`,
+      [first.reference, new Date(Date.now() - 1000)],
     );
     await assert.rejects(
-      prisma.$executeRaw`INSERT INTO "Booking"
+      pool.query(
+        `INSERT INTO vijaya."SlotState" ("id","spaceId","date","slot","startMinute","endMinute","status","updatedAt")
+         VALUES ('test-conflict','periyar',$1,'DIRECT_TEST',1100,1150,'CONFIRMED',now())`,
+        [baseBooking.date],
+      ),
+      (error: unknown) => !!error && typeof error === "object" && "code" in error && error.code === "23P01",
+    );
+    await assert.rejects(
+      pool.query(
+        `INSERT INTO vijaya."Booking"
         ("id", "reference", "spaceId", "spaceName", "eventType", "eventDate", "slot", "guests", "status",
          "customerName", "customerPhone", "customerEmail", "baseAmount", "totalPayable", "updatedAt")
-        VALUES ('direct-booking-test', 'direct-booking-test', 'periyar', 'Periyar', 'WEDDING', ${baseBooking.date},
-          'EVENING', 800, 'CONFIRMED', 'Fixture', '', 'fixture@example.test', 0, 0, NOW())`,
-      (error: unknown) => !!error && typeof error === "object" && "meta" in error &&
-        !!error.meta && typeof error.meta === "object" && "code" in error.meta && error.meta.code === "23P01",
+        VALUES ('direct-booking-test','direct-booking-test','periyar','Periyar','WEDDING',$1,
+          'EVENING',800,'CONFIRMED','Fixture','','fixture@example.test',0,0,now())`,
+        [baseBooking.date],
+      ),
+      (error: unknown) => !!error && typeof error === "object" && "code" in error && error.code === "23P01",
     );
-    const expired = await prisma.$queryRaw<{ count: number }[]>`SELECT vijaya.expire_holds() AS count`;
-    assert.equal(expired[0]?.count, 1);
+    const { rows: [expired] } = await pool.query<{ count: number }>(`SELECT vijaya.expire_holds() AS count`);
+    assert.equal(expired?.count, 1);
   } finally {
-    await prisma.$disconnect();
+    await pool.end();
   }
   assert.equal((await api("/api/internal/expire-holds", "POST", undefined, undefined, { authorization: `Bearer ${cron}` })).status, 200);
   const replacementHold = await api("/api/booking/hold", "POST", { ...baseBooking, date: expiryDate });

@@ -6,10 +6,10 @@ This guide uses **Supabase PostgreSQL** for application records and **Supabase S
 
 1. Open the [Supabase dashboard](https://supabase.com/dashboard), create a project and save the database password.
 2. From the project, open **Connect** and copy the **Session pooler** and **Transaction pooler** connection strings. Use the exact region host shown for your project.
-3. Append `schema=vijaya` to both strings. Add `sslmode=require` to both, and `pgbouncer=true&connection_limit=1` to the transaction string. URL-encode special characters in the database password.
+3. Append `schema=vijaya&sslmode=require` to both strings. URL-encode special characters in the database password.
 4. Keep `vijaya` out of the Supabase Data API **Exposed schemas** setting. The migration enables RLS on every application table in the private schema and revokes browser-role access. Keep that schema out of the Data API, even when the API is enabled for other uses.
 
-[Supabase Prisma setup](https://supabase.com/docs/guides/database/prisma) · [Pooler modes](https://supabase.com/docs/guides/database/connecting-to-postgres/pooling-and-limits)
+[Supabase connection strings](https://supabase.com/docs/guides/database/connecting-to-postgres) · [Pooler modes](https://supabase.com/docs/guides/database/connecting-to-postgres/pooling-and-limits)
 
 ## 2. Apply migrations from your computer
 
@@ -56,7 +56,7 @@ If your old site has CMS uploads, copy the files into the appropriate Storage bu
 
 ## 4. Create the runtime database role and media bucket
 
-In the Supabase SQL Editor, run the following once. Substitute a strong generated password locally. This role accesses the application tables through Prisma and has no schema migration privileges.
+In the Supabase SQL Editor, run the following once. Substitute a strong generated password locally. This role accesses application tables through the server-side PostgreSQL driver and has no schema migration privileges.
 
 ```sql
 create role vijaya_runtime login password '<generated-runtime-password>';
@@ -65,7 +65,7 @@ do $$
 declare item record;
 begin
   for item in select tablename from pg_tables
-    where schemaname = 'vijaya' and tablename <> '_prisma_migrations'
+    where schemaname = 'vijaya' and tablename <> '_app_migrations'
   loop
     execute format('grant select, insert, update, delete on vijaya.%I to vijaya_runtime', item.tablename);
     execute format('create policy vijaya_server on vijaya.%I to vijaya_runtime using (true) with check (true)', item.tablename);
@@ -82,7 +82,7 @@ In Supabase **Storage**, create a public bucket named `site-media` for approved 
 ## 5. Import the GitHub repository into Vercel
 
 1. Go to [Vercel](https://vercel.com/new), choose **Import Git Repository**, and select `akmsaleemdev/Vijaya_Web`.
-2. Choose **Next.js**, use the repository root, and select Node.js 22. The default build runs `npm run build`, which includes Next.js compilation. Prisma generates its client during install. Run database migrations separately from your computer before deploying schema changes.
+2. Choose **Next.js**, use the repository root, and select Node.js 22. The default build runs `npm run build`, which includes Next.js compilation. Run `npm run db:deploy` from your computer before deploying schema changes; Vercel uses the restricted runtime role and does not apply migrations.
 3. Add these variables to the **Production** environment. Use a separate Supabase project and separate secrets for previews.
 
 | Vercel variable | Value |

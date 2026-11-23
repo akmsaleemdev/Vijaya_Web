@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { publicAmounts } from "@/lib/booking/amounts";
 import { bookingMode } from "@/lib/payments/settings";
-import { db } from "@/lib/db";
+import { query } from "@/lib/db";
+import type { Booking, Payment } from "@/lib/db/types";
 
 export const dynamic = "force-dynamic";
 
@@ -12,15 +13,19 @@ export const dynamic = "force-dynamic";
 export async function GET(_req: Request, { params }: { params: Promise<{ reference: string }> }) {
   const { reference } = await params;
   const ref = reference.toUpperCase();
-  const b = await db.booking.findUnique({
-    where: { reference: ref },
-    include: { payments: { orderBy: { createdAt: "desc" } }, space: { select: { requiresApproval: true } } },
-  });
+  const { rows: [b] } = await query<Booking & { payments: Payment[]; requiresApproval: boolean }>(
+    `SELECT b.*, s."requiresApproval",
+       COALESCE((SELECT json_agg(p ORDER BY p."createdAt" DESC) FROM vijaya."Payment" p WHERE p."bookingId" = b."id"), '[]'::json) AS payments
+     FROM vijaya."Booking" b
+     JOIN vijaya."Space" s ON s."id" = b."spaceId"
+     WHERE b."reference" = $1`,
+    [ref],
+  );
   if (!b) return NextResponse.json({ error: "Booking not found." }, { status: 404 });
 
   return NextResponse.json({
     reference: b.reference,
-    bookingMode: b.space.requiresApproval ? "OFFLINE" : await bookingMode(),
+    bookingMode: b.requiresApproval ? "OFFLINE" : await bookingMode(),
     spaceName: b.spaceName,
     eventType: b.eventType,
     eventDate: b.eventDate,

@@ -4,14 +4,14 @@ Production website for VIJAYA International Convention Centre, Thiruvalla, Keral
 A premium destination for weddings, celebrations and business events.
 
 **Stack:** Next.js 16 (App Router) · React 19 · TypeScript · Tailwind CSS 4 ·
-shadcn/ui · Prisma (PostgreSQL) · next-intl · Framer Motion · z-ai-web-dev-sdk
+shadcn/ui · PostgreSQL (`pg`) · next-intl · Framer Motion · z-ai-web-dev-sdk
 
 ---
 
 ## Supabase and Vercel deployment
 
 Follow the [step-by-step deployment guide](docs/SUPABASE-VERCEL.md) to create
-Supabase PostgreSQL and Storage, apply Prisma migrations, import existing
+Supabase PostgreSQL and Storage, apply SQL migrations, import existing
 SQLite data if needed, and deploy to Vercel.
 
 The public booking flow accepts unpaid requests by default. Pending approval
@@ -59,9 +59,10 @@ src/
     layout/            # Site header + footer + page hero
     motion/            # Reveal / parallax / hero text animations
     ui/                # shadcn/ui primitives
-  lib/                 # Site config, data, fonts, analytics, prisma client
+  lib/                 # Site config, data, fonts, analytics, PostgreSQL access
   hooks/               # React hooks
-prisma/                # schema.prisma + seed.ts
+supabase/migrations/   # Versioned PostgreSQL schema migrations
+scripts/db-*.ts        # Direct PostgreSQL migration and seed tooling
 public/
   media/               # Hero video variants (desktop/mobile), photography, poster
   brand/               # Official logos (burgundy, gold, white)
@@ -100,7 +101,7 @@ node scripts/gen_perf_report.js       # Regenerate the performance report docx
 - This archive **excludes** `node_modules/`, `.next/`, `.git/`, legacy
   SQLite databases and backups, and the real `.env`. Run `npm ci` and
   the database setup steps above to get a running copy.
-- The production database is excluded to avoid shipping customer data; the
-  schema and seed in `prisma/` recreate the structure with sample data.
+- The production database is excluded to avoid shipping customer data; SQL
+  migrations and seed scripts recreate the structure without replacing existing data.
 - Official VIJAYA branding (burgundy / gold / white logos) is in `public/brand/`.
   Do not reintroduce the legacy VICC logos.

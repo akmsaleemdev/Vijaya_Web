@@ -1,7 +1,7 @@
 import { resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { loadEnvConfig } from "@next/env";
-import { Prisma, PrismaClient } from "@prisma/client";
+import { Pool } from "pg";
 
 const durableTables = [
   "Space", "SlotState", "Booking", "Payment", "Lead", "Document", "Milestone", "SupportTicket", "AnalyticsEvent",
@@ -43,28 +43,41 @@ async function importDatabase() {
     throw new Error("Use a direct or session-pooler DIRECT_URL with schema=vijaya.");
   }
   const sqlite = new DatabaseSync(resolve(filename), { readOnly: true });
-  const pg = new PrismaClient({ datasourceUrl: url });
+  const pool = new Pool({ connectionString: url, max: 1, connectionTimeoutMillis: 10_000 });
+  const client = await pool.connect();
   try {
     const integrity = sqlite.prepare("PRAGMA quick_check").get()?.quick_check;
     if (integrity !== "ok") throw new Error("SQLite integrity check failed.");
-    const counts = await pg.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT pg_advisory_xact_lock(20261123, 1) IS NULL AS locked`;
+    await client.query("BEGIN");
+    try {
+      await client.query("SET LOCAL search_path TO vijaya, extensions, public");
+      await client.query("SELECT pg_advisory_xact_lock($1, $2)", [20261123, 1]);
       const rowsCopied: Record<string, { source: number; inserted: number }> = {};
       for (const table of durableTables) {
-        const target = Prisma.raw(`"vijaya"."${table}"`);
-        const populated = await tx.$queryRaw<{ populated: boolean }[]>`SELECT EXISTS (SELECT 1 FROM ${target}) AS populated`;
-        if (populated[0]?.populated) throw new Error(`Target table ${table} is populated. Use an empty database before seeding.`);
+        const { rows: [populated] } = await client.query<{ populated: boolean }>(
+          `SELECT EXISTS (SELECT 1 FROM vijaya."${table}") AS populated`,
+        );
+        if (populated?.populated) throw new Error(`Target table ${table} is populated. Use an empty database before seeding.`);
         const present = sqlite.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(table);
         if (!present) continue;
-        const columns = await tx.$queryRaw<Column[]>`SELECT column_name, data_type FROM information_schema.columns WHERE table_schema='vijaya' AND table_name=${table}`;
+        const { rows: columns } = await client.query<Column>(
+          `SELECT column_name, data_type FROM information_schema.columns WHERE table_schema='vijaya' AND table_name=$1`,
+          [table],
+        );
         const known = new Map(columns.map(({ column_name, data_type }) => [column_name, data_type]));
         const statement = sqlite.prepare(`SELECT * FROM "${table}"`);
         let batch: Record<string, unknown>[] = [];
         let total = 0;
         async function flush() {
           if (!batch.length) return;
-          const fields = Prisma.join(Object.keys(batch[0]).map((field) => Prisma.raw('"' + field.replaceAll('"', '""') + '"')));
-          total += await tx.$executeRaw`INSERT INTO ${target} (${fields}) SELECT ${fields} FROM json_populate_recordset(NULL::${target}, ${JSON.stringify(batch)}::json)`;
+          const names = Object.keys(batch[0]);
+          const fields = names.map((field) => `"${field.replaceAll('"', '""')}"`).join(",");
+          const target = `vijaya."${table}"`;
+          const result = await client.query(
+            `INSERT INTO ${target} (${fields}) SELECT ${fields} FROM json_populate_recordset(NULL::${target}, $1::json)`,
+            [JSON.stringify(batch)],
+          );
+          total += result.rowCount ?? 0;
           batch = [];
         }
         for (const raw of statement.iterate()) {
@@ -82,20 +95,21 @@ async function importDatabase() {
         if (source !== total) throw new Error(`Row count mismatch for ${table}.`);
         rowsCopied[table] = { source, inserted: total };
       }
-      return rowsCopied;
-    }, { timeout: 600_000, maxWait: 30_000 });
-    console.table(counts);
+      await client.query("COMMIT");
+      console.table(rowsCopied);
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    }
   } finally {
     sqlite.close();
-    await pg.$disconnect();
+    client.release();
+    await pool.end();
   }
 }
 
 void importDatabase().catch((error: unknown) => {
-  if (error instanceof Prisma.PrismaClientKnownRequestError) {
-    console.error(`Import rolled back (Prisma ${error.code}, database ${error.meta?.code ?? "unknown"}). Check legacy data for duplicate keys or overlapping reservations.`);
-  } else {
-    console.error(error instanceof Error ? error.message : "SQLite import failed.");
-  }
+  const code = error && typeof error === "object" && "code" in error ? String(error.code) : undefined;
+  console.error("SQLite import failed:", error instanceof Error ? error.message : "unknown error", code ? `(PostgreSQL ${code})` : "");
   process.exitCode = 1;
 });

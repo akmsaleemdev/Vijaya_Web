@@ -1,9 +1,10 @@
 import { createCipheriv, randomBytes } from "node:crypto";
 import { z } from "zod";
-import { db } from "@/lib/db";
+import { query } from "@/lib/db";
 import { bookingTransaction } from "@/lib/booking/transaction";
 import { bookingMode, paymentSettingsId } from "@/lib/payments/settings";
 import { audit, failure, success, type Identity } from "./http";
+import type { GatewayCredential, PaymentSettings } from "@/lib/db/types";
 
 const provider = z.enum(["RAZORPAY", "STRIPE"]);
 const input = z.discriminatedUnion("action", [
@@ -27,9 +28,9 @@ function encrypt(key: Buffer, provider: string, credentials: { secret: string; w
 
 export async function gateways(req: Request, actor: Identity) {
   if (req.method === "GET") {
-    const [settings, credentials, mode] = await Promise.all([
-      db.paymentSettings.findUnique({ where: { id: paymentSettingsId } }),
-      db.gatewayCredential.findMany({ select: { provider: true, keyId: true, updatedAt: true } }),
+    const [{ rows: [settings] }, { rows: credentials }, mode] = await Promise.all([
+      query<PaymentSettings>(`SELECT * FROM vijaya."PaymentSettings" WHERE "id" = $1`, [paymentSettingsId]),
+      query<Pick<GatewayCredential, "provider" | "keyId" | "updatedAt">>(`SELECT "provider", "keyId", "updatedAt" FROM vijaya."GatewayCredential"`),
       bookingMode(),
     ]);
     return success({
@@ -45,16 +46,21 @@ export async function gateways(req: Request, actor: Identity) {
       return failure(409, "SANDBOX_NOT_ENABLED", "Enable sandbox payments in this deployment first.");
     }
     return bookingTransaction(async (tx) => {
-      const where = { id: paymentSettingsId };
-      const data = { mode: action.mode, provider: action.provider };
-      const before = await tx.paymentSettings.findUnique({ where });
-      const after = await tx.paymentSettings.upsert({ where, update: data, create: { ...where, ...data } });
+      const { rows: [before] } = await tx.query<PaymentSettings>(`SELECT * FROM vijaya."PaymentSettings" WHERE "id" = $1`, [paymentSettingsId]);
+      const { rows: [after] } = await tx.query<PaymentSettings>(
+        `INSERT INTO vijaya."PaymentSettings" ("id", "mode", "provider", "updatedAt")
+         VALUES ($1,$2,$3,now())
+         ON CONFLICT ("id") DO UPDATE SET "mode" = EXCLUDED."mode", "provider" = EXCLUDED."provider", "updatedAt" = now()
+         RETURNING *`,
+        [paymentSettingsId, action.mode, action.provider],
+      );
+      if (!after) throw new Error("Payment settings write returned no row.");
       await audit(tx, actor, "BOOKING_PAYMENT_MODE_UPDATED", "PaymentSettings", paymentSettingsId, before, after);
       return success(after);
     });
   }
   if (action.action === "REMOVE_TEST_KEYS") return bookingTransaction(async (tx) => {
-    await tx.gatewayCredential.deleteMany({ where: { provider: action.provider } });
+    await tx.query(`DELETE FROM vijaya."GatewayCredential" WHERE "provider" = $1`, [action.provider]);
     await audit(tx, actor, "GATEWAY_TEST_KEYS_REMOVED", "GatewayCredential", action.provider);
     return success({ provider: action.provider });
   });
@@ -68,9 +74,12 @@ export async function gateways(req: Request, actor: Identity) {
   }
   const encrypted = encrypt(key, action.provider, { secret: action.secret, webhookSecret: action.webhookSecret || undefined });
   return bookingTransaction(async (tx) => {
-    const where = { provider: action.provider };
-    const data = { keyId: action.keyId, encrypted };
-    await tx.gatewayCredential.upsert({ where, update: data, create: { ...where, ...data } });
+    await tx.query(
+      `INSERT INTO vijaya."GatewayCredential" ("provider", "keyId", "encrypted", "updatedAt")
+       VALUES ($1,$2,$3,now())
+       ON CONFLICT ("provider") DO UPDATE SET "keyId" = EXCLUDED."keyId", "encrypted" = EXCLUDED."encrypted", "updatedAt" = now()`,
+      [action.provider, action.keyId, encrypted],
+    );
     await audit(tx, actor, "GATEWAY_TEST_KEYS_SAVED", "GatewayCredential", action.provider);
     return success({ provider: action.provider, lastFour: action.keyId.slice(-4) });
   });

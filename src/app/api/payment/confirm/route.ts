@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { db } from "@/lib/db";
+import { query } from "@/lib/db";
+import type { Booking, Payment } from "@/lib/db/types";
 
 export const dynamic = "force-dynamic";
 
@@ -13,9 +14,15 @@ export async function POST(req: Request) {
   try {
     const { providerRef } = await req.json();
     if (!providerRef) return NextResponse.json({ error: "providerRef required" }, { status: 400 });
-    const payment = await db.payment.findUnique({ where: { providerRef: String(providerRef) } });
+    const { rows: [payment] } = await query<Payment>(
+      `SELECT * FROM vijaya."Payment" WHERE "providerRef" = $1`,
+      [String(providerRef)],
+    );
     if (!payment) return NextResponse.json({ error: "Unknown payment reference." }, { status: 404 });
-    const booking = await db.booking.findUnique({ where: { id: payment.bookingId } });
+    const { rows: [booking] } = await query<Pick<Booking, "status" | "reference">>(
+      `SELECT "status"::text AS "status", "reference" FROM vijaya."Booking" WHERE "id" = $1`,
+      [payment.bookingId],
+    );
     return NextResponse.json({
       status: payment.status,
       amount: payment.amount,

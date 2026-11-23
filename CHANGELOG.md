@@ -8,7 +8,8 @@
 
 ## Supabase, Vercel and offline reservations
 
-- Switched Prisma to Supabase PostgreSQL with a private schema and an exclusion constraint for overlapping venue sessions. Archived SQLite migrations and added a transactional data importer.
+- Configured Supabase PostgreSQL with a private schema and an exclusion constraint for overlapping venue sessions. Archived SQLite migrations and added a transactional data importer.
+- Replaced the Prisma runtime and schema with parameterized PostgreSQL queries, SQL migrations, and direct-SQL seed and maintenance scripts.
 - Made unpaid requests with staff approval the default booking flow. Added sandbox switching and encrypted Razorpay and Stripe test credential settings for Super Admins.
 - Added Supabase Storage for persistent CMS media on Vercel and documented migration, seeding and deployment.
 

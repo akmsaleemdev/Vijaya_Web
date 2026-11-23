@@ -1,14 +1,18 @@
-import type { Space } from "@prisma/client";
 import { unstable_cache } from "next/cache";
 import { cache } from "react";
-import { db } from "@/lib/db";
+import { query } from "@/lib/db";
+import type { Space } from "@/lib/db/types";
 import { venueContentSchema } from "@/lib/cms/venue-schema";
 import { spaceContent } from "@/lib/content";
 import { SPACES, SPACE_BY_SLUG, type SpaceRecord } from "@/lib/data/spaces";
 
 const inventory = cache(async () => {
   try {
-    return await unstable_cache(() => db.space.findMany({ orderBy: { sortOrder: "asc" } }), ["vijaya-venue-inventory"], { tags: ["venues"], revalidate: 5 })();
+    return await unstable_cache(
+      async () => (await query<Space>(`SELECT * FROM vijaya."Space" ORDER BY "sortOrder" ASC`)).rows,
+      ["vijaya-venue-inventory"],
+      { tags: ["venues"], revalidate: 5 },
+    )();
   } catch {
     return [];
   }

@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import { BookingStatus, type Prisma } from "@prisma/client";
+import { query } from "@/lib/db";
+import type { AuditLog, Booking, BookingNote, Document, Milestone, Payment, Space, SlotState } from "@/lib/db/types";
 import { sumMoney, totalContract, type Money } from "@/lib/booking/amounts";
-import { db } from "@/lib/db";
 import { confirmIn, createTemporaryHold } from "@/lib/availability";
 import { dates, holdInput, indiaDate } from "@/lib/booking/slots";
 import { cancelIn, expireIn, pendingStatuses, isSlotConflict, physicalSpaces, reserve, slotRange } from "@/lib/booking/state";
@@ -11,7 +11,9 @@ import { spreadsheet } from "./spreadsheet";
 import { audit, failure, success, type Identity } from "./http";
 
 const filter = z.object({
-  q: z.string().max(120).optional(), status: z.enum(BookingStatus).optional(), venue: z.string().max(100).optional(),
+  q: z.string().max(120).optional(),
+  status: z.enum(["PENDING_HOLD","PENDING_APPROVAL","PENDING_PAYMENT","CONFIRMED","CANCELLED","REJECTED","EXPIRED","COMPLETED","NO_SHOW"]).optional(),
+  venue: z.string().max(100).optional(),
   from: dates.optional(), to: dates.optional(), source: z.enum(["ADMIN", "WEB"]).optional(),
   payment: z.enum(["PAID", "OUTSTANDING"]).optional(),
   page: z.coerce.number().int().min(1).max(10000).default(1),
@@ -30,33 +32,63 @@ function csvField(value: unknown) {
 
 export async function bookings(req: Request, actor: Identity, reference?: string) {
   if (reference) {
-    const booking = await db.booking.findUnique({ where: { reference }, include: { payments: true, documents: true, milestones: true } });
+    const { rows: [booking] } = await query<Booking & { payments: Payment[]; documents: Document[]; milestones: Milestone[] }>(
+      `SELECT b.*,
+         COALESCE((SELECT json_agg(p ORDER BY p."createdAt" DESC) FROM vijaya."Payment" p WHERE p."bookingId" = b."id"), '[]'::json) AS payments,
+         COALESCE((SELECT json_agg(d ORDER BY d."createdAt" DESC) FROM vijaya."Document" d WHERE d."bookingId" = b."id"), '[]'::json) AS documents,
+         COALESCE((SELECT json_agg(m ORDER BY m."order" ASC) FROM vijaya."Milestone" m WHERE m."bookingId" = b."id"), '[]'::json) AS milestones
+       FROM vijaya."Booking" b WHERE b."reference" = $1`,
+      [reference],
+    );
     if (!booking) return failure(404, "NOT_FOUND", "Booking not found.");
     const [history, notes] = await Promise.all([
-      db.auditLog.findMany({ where: { entity: "Booking", entityRef: reference }, orderBy: { createdAt: "desc" } }),
-      db.bookingNote.findMany({ where: { bookingRef: reference }, orderBy: { createdAt: "desc" } }),
+      query<AuditLog>(`SELECT * FROM vijaya."AuditLog" WHERE "entity" = 'Booking' AND "entityRef" = $1 ORDER BY "createdAt" DESC`, [reference]),
+      query<BookingNote>(`SELECT * FROM vijaya."BookingNote" WHERE "bookingRef" = $1 ORDER BY "createdAt" DESC`, [reference]),
     ]);
     return success({ ...booking, baseAmount: Number(booking.baseAmount), weekendUplift: Number(booking.weekendUplift), taxAmount: Number(booking.taxAmount),
       totalPayable: Number(booking.totalPayable), addons: booking.addons ? JSON.stringify(booking.addons) : null,
-      payments: booking.payments.map((item) => ({ ...item, amount: Number(item.amount) })), history, notesLog: notes, balance: contract(booking) - paid(booking.payments) });
+      payments: booking.payments.map((item) => ({ ...item, amount: Number(item.amount) })), history: history.rows, notesLog: notes.rows, balance: contract(booking) - paid(booking.payments) });
   }
   const parsed = filter.safeParse(Object.fromEntries(new URL(req.url).searchParams));
   if (!parsed.success) return failure(422, "INVALID_FILTER", "Check your booking filters.");
   const { q, venue, from, to, status, source, payment, page, sort, order, export: format } = parsed.data;
   if (format && actor.admin.role !== "SUPER_ADMIN") return failure(403, "FORBIDDEN", "An administrator must export bookings.");
-  const baseWhere: Prisma.BookingWhereInput = {
-    status, spaceId: venue, source, eventDate: from || to ? { gte: from, lte: to } : undefined,
-    OR: q ? ["reference", "customerName", "customerPhone", "customerEmail"].map((field) => ({ [field]: { contains: q } })) : undefined,
+  const conditions = ["TRUE"];
+  const values: unknown[] = [];
+  const add = (condition: (parameter: string) => string, value: unknown) => {
+    values.push(value);
+    conditions.push(condition("$" + values.length));
   };
-  const candidates = payment ? await db.booking.findMany({ where: baseWhere, include: { payments: true } }) : null;
-  const where: Prisma.BookingWhereInput = candidates ? { ...baseWhere, id: { in: candidates.filter((row) => {
-    const settled = contract(row) <= paid(row.payments);
-    return payment === "PAID" ? settled : !settled;
-  }).map((row) => row.id) } } : baseWhere;
-  const [rows, total] = await Promise.all([
-    db.booking.findMany({ where, orderBy: [{ [sort]: order }, { id: "asc" }], take: format ? 10000 : 25, skip: format ? 0 : (page - 1) * 25, include: { payments: true } }),
-    db.booking.count({ where }),
+  if (status) add((p) => `b."status" = ${p}`, status);
+  if (venue) add((p) => `b."spaceId" = ${p}`, venue);
+  if (source) add((p) => `b."source" = ${p}`, source);
+  if (from) add((p) => `b."eventDate" >= ${p}`, from);
+  if (to) add((p) => `b."eventDate" <= ${p}`, to);
+  if (q) add((p) => `(strpos(b."reference",${p}) > 0 OR strpos(b."customerName",${p}) > 0 OR strpos(b."customerPhone",${p}) > 0 OR strpos(b."customerEmail",${p}) > 0)`, q);
+  if (payment) {
+    const paidExpr = `COALESCE((SELECT sum(p."amount") FROM vijaya."Payment" p WHERE p."bookingId" = b."id" AND p."status" = 'SUCCESS'), 0)`;
+    const contractExpr = `(b."baseAmount" + b."weekendUplift" + b."taxAmount")`;
+    conditions.push(payment === "PAID" ? `${paidExpr} >= ${contractExpr}` : `${paidExpr} < ${contractExpr}`);
+  }
+  const whereSql = conditions.join(" AND ");
+  const sortColumn = { eventDate: "eventDate", createdAt: "createdAt", customerName: "customerName", status: "status" }[sort];
+  const direction = order === "asc" ? "ASC" : "DESC";
+  const limit = format ? 10000 : 25;
+  const offset = format ? 0 : (page - 1) * 25;
+  const listValues = [...values, limit, offset];
+  const [listResult, countResult] = await Promise.all([
+    query<Booking & { payments: Payment[] }>(
+      `SELECT b.*,
+         COALESCE((SELECT json_agg(p ORDER BY p."createdAt" DESC) FROM vijaya."Payment" p WHERE p."bookingId" = b."id"), '[]'::json) AS payments
+       FROM vijaya."Booking" b WHERE ${whereSql}
+       ORDER BY b."${sortColumn}" ${direction}, b."id" ASC
+       LIMIT $${values.length + 1} OFFSET $${values.length + 2}`,
+      listValues,
+    ),
+    query<{ count: string }>(`SELECT count(*)::text AS count FROM vijaya."Booking" b WHERE ${whereSql}`, values),
   ]);
+  const rows = listResult.rows;
+  const total = Number(countResult.rows[0]?.count ?? 0);
   if (format) {
     if (total > rows.length) return failure(422, "EXPORT_TOO_LARGE", "Narrow the date range before exporting.");
     const fields = ["reference", "customerName", "customerEmail", "customerPhone", "status", "spaceName", "eventDate", "slot", "guests", "source"] as const;
@@ -95,7 +127,12 @@ export async function updateBooking(req: Request, actor: Identity, reference: st
   try {
     return await bookingTransaction(async (tx) => {
       await expireIn(tx);
-      const booking = await tx.booking.findUnique({ where: { reference }, include: { payments: true } });
+      const { rows: [booking] } = await tx.query<Booking & { payments: Payment[] }>(
+        `SELECT b.*,
+           COALESCE((SELECT json_agg(p) FROM vijaya."Payment" p WHERE p."bookingId" = b."id"), '[]'::json) AS payments
+         FROM vijaya."Booking" b WHERE b."reference" = $1`,
+        [reference],
+      );
       if (!booking) return failure(404, "NOT_FOUND", "Booking not found.");
       const conflict = () => failure(409, "INVALID_STATUS", "The booking cannot transition from its current status.");
       switch (action.action) {
@@ -111,41 +148,60 @@ export async function updateBooking(req: Request, actor: Identity, reference: st
         case "NO_SHOW": {
           if (booking.status !== "CONFIRMED" || booking.eventDate > indiaDate()) return conflict();
           const status = action.action === "COMPLETE" ? "COMPLETED" : "NO_SHOW";
-          await tx.booking.update({ where: { reference }, data: { status } });
+          await tx.query(`UPDATE vijaya."Booking" SET "status" = $2::vijaya."BookingStatus", "updatedAt" = now() WHERE "reference" = $1`, [reference, status]);
           await audit(tx, actor, status, "Booking", reference, { status: booking.status }, { status });
           break;
         }
         case "RESCHEDULE": {
           if (booking.status !== "PENDING_HOLD" && booking.status !== "PENDING_APPROVAL" && booking.status !== "PENDING_PAYMENT" && booking.status !== "CONFIRMED") return conflict();
-          const space = await tx.space.findUnique({ where: { id: action.venue } });
+          const { rows: [space] } = await tx.query<Space>(`SELECT * FROM vijaya."Space" WHERE "id" = $1`, [action.venue]);
           const range = space?.active && await slotRange(tx, action.venue, action.slot);
           if (!space || !range || action.date < indiaDate() || (space.capacityMin ?? 0) > booking.guests || (space.capacityMax ?? Infinity) < booking.guests) {
             return failure(422, "INVALID_SESSION", "Choose an active venue and session that can accommodate this booking.");
           }
-          await tx.slotState.deleteMany({ where: { bookingRef: reference, source: { in: ["ONLINE", "OPS"] } } });
+          await tx.query(`DELETE FROM vijaya."SlotState" WHERE "bookingRef" = $1 AND "source" = ANY($2::text[])`, [reference, ["ONLINE", "OPS"]]);
           const status = booking.status === "PENDING_HOLD" ? "TEMPORARY_HOLD" : booking.status;
           const times = await reserve(tx, { spaceSlug: space.id, date: action.date, slot: action.slot, range, status, source: "OPS", bookingRef: reference, holdExpiresAt: booking.holdExpiresAt ?? undefined });
-          await tx.booking.update({ where: { reference }, data: { ...times, spaceId: space.id, spaceName: space.name, eventDate: action.date, slot: action.slot } });
-          const milestones = await tx.milestone.findMany({ where: { bookingId: booking.id } });
+          await tx.query(
+            `UPDATE vijaya."Booking"
+             SET "spaceId" = $2, "spaceName" = $3, "eventDate" = $4, "slot" = $5,
+                 "childSpaceIds" = $6, "startAt" = $7, "endAt" = $8, "updatedAt" = now()
+             WHERE "reference" = $1`,
+            [reference, space.id, space.name, action.date, action.slot, times.childSpaceIds, times.startAt, times.endAt],
+          );
+          const { rows: milestones } = await tx.query<Milestone>(`SELECT * FROM vijaya."Milestone" WHERE "bookingId" = $1`, [booking.id]);
           for (const milestone of milestones) {
             const dueDate = new Date(Date.parse(action.date + "T00:00:00Z") - milestone.order * 86400000).toISOString().slice(0, 10);
-            await tx.milestone.update({ where: { id: milestone.id }, data: { dueDate } });
+            await tx.query(`UPDATE vijaya."Milestone" SET "dueDate" = $2 WHERE "id" = $1`, [milestone.id, dueDate]);
           }
           await audit(tx, actor, "RESCHEDULED", "Booking", reference, { date: booking.eventDate, venue: booking.spaceId, slot: booking.slot }, action);
           break;
         }
         case "NOTE":
-          await tx.bookingNote.create({ data: { bookingRef: reference, note: action.note, actorId: actor.admin.id } });
+          await tx.query(
+            `INSERT INTO vijaya."BookingNote" ("id","bookingRef","note","actorId","createdAt") VALUES ($1,$2,$3,$4,now())`,
+            [randomUUID(), reference, action.note, actor.admin.id],
+          );
           await audit(tx, actor, "NOTE_ADDED", "Booking", reference, undefined, { note: action.note });
           break;
         case "PAYMENT": {
           if (!["CONFIRMED", "COMPLETED", "PENDING_PAYMENT"].includes(booking.status)) return conflict();
           const idempotencyKey = `offline:${booking.id}:${action.key}`;
-          const existing = await tx.payment.findUnique({ where: { idempotencyKey } });
-          if (existing) return existing.amount.equals(action.amount) && existing.method === action.method ? success({ reference }) : failure(409, "IDEMPOTENCY_CONFLICT", "Use a new request key for a different payment.");
+          const { rows: [existing] } = await tx.query<Payment>(`SELECT * FROM vijaya."Payment" WHERE "idempotencyKey" = $1`, [idempotencyKey]);
+          if (existing) return Number(existing.amount) === action.amount && existing.method === action.method ? success({ reference }) : failure(409, "IDEMPOTENCY_CONFLICT", "Use a new request key for a different payment.");
           if (action.amount > contract(booking) - paid(booking.payments)) return failure(422, "INVALID_AMOUNT", "The payment exceeds the balance.");
-          const payment = await tx.payment.create({ data: { bookingId: booking.id, amount: action.amount, method: action.method, status: "SUCCESS", provider: "OFFLINE", providerRef: randomUUID(), idempotencyKey, paidAt: new Date() } });
-          await tx.document.create({ data: { bookingId: booking.id, type: "RECEIPT", title: `Payment Receipt — ${payment.providerRef}` } });
+          const providerRef = randomUUID();
+          const { rows: [payment] } = await tx.query<Payment>(
+            `INSERT INTO vijaya."Payment"
+              ("id","bookingId","amount","method","status","provider","providerRef","idempotencyKey","paidAt","createdAt","updatedAt")
+             VALUES ($1,$2,$3,$4,'SUCCESS','OFFLINE',$5,$6,now(),now(),now()) RETURNING *`,
+            [randomUUID(), booking.id, action.amount, action.method, providerRef, idempotencyKey],
+          );
+          if (!payment) throw new Error("Payment record insert returned no row.");
+          await tx.query(
+            `INSERT INTO vijaya."Document" ("id","bookingId","type","title","createdAt") VALUES ($1,$2,'RECEIPT',$3,now())`,
+            [randomUUID(), booking.id, `Payment Receipt — ${payment.providerRef}`],
+          );
           await audit(tx, actor, "PAYMENT_RECORDED", "Booking", reference, undefined, { paymentId: payment.id, amount: payment.amount });
           break;
         }
@@ -162,9 +218,12 @@ const blockInput = z.object({ from: dates, to: dates, venue: z.string().min(1).m
 export async function blockDates(req: Request, actor: Identity, groupId?: string) {
   if (req.method === "DELETE" && groupId) {
     return bookingTransaction(async (tx) => {
-      const rows = await tx.slotState.findMany({ where: { groupId, status: "BLOCKED", source: "OPS" } });
+      const { rows } = await tx.query<SlotState>(
+        `SELECT * FROM vijaya."SlotState" WHERE "groupId" = $1 AND "status" = 'BLOCKED' AND "source" = 'OPS'`,
+        [groupId],
+      );
       if (!rows.length) return failure(404, "NOT_FOUND", "Block not found.");
-      await tx.slotState.deleteMany({ where: { id: { in: rows.map(({ id }) => id) } } });
+      await tx.query(`DELETE FROM vijaya."SlotState" WHERE "groupId" = $1 AND "status" = 'BLOCKED' AND "source" = 'OPS'`, [groupId]);
       await audit(tx, actor, "BLOCK_REMOVED", "SlotState", groupId, rows);
       return success({ groupId });
     });
@@ -178,7 +237,10 @@ export async function blockDates(req: Request, actor: Identity, groupId?: string
   try {
     return await bookingTransaction(async (tx) => {
       await expireIn(tx);
-      const spaces = await tx.space.findMany({ where: { active: true, id: input.venue === "ALL" ? undefined : input.venue } });
+      const { rows: spaces } = await tx.query<Space>(
+        `SELECT * FROM vijaya."Space" WHERE "active" = true AND ($1::text IS NULL OR "id" = $1)`,
+        [input.venue === "ALL" ? null : input.venue],
+      );
       const physical = input.venue === "ALL" ? spaces.filter((space) => physicalSpaces(space.id).includes(space.id)) : spaces;
       const planned = await Promise.all(physical.map(async (space) => ({ id: space.id, range: await slotRange(tx, space.id, input.slot) })));
       if (!planned.length || planned.some((space) => !space.range)) return failure(422, "UNKNOWN_SESSION", "The selected session is unavailable for one or more venues.");

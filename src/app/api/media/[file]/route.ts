@@ -4,14 +4,18 @@ import { Readable } from "node:stream";
 import path from "node:path";
 import { currentAdmin } from "@/lib/admin/auth";
 import { documentsBucket, siteMediaBucket, supabaseMedia } from "@/lib/media/remote-storage";
-import { db } from "@/lib/db";
+import { query } from "@/lib/db";
+import type { MediaAsset } from "@/lib/db/types";
 import { assetId, uploadPath } from "@/lib/media/upload-storage";
 
 export async function GET(req: Request, { params }: { params: Promise<{ file: string }> }) {
   const { file } = await params;
   const id = file.split(".")[0];
   if (!assetId.safeParse(id).success) return new Response(null, { status: 404 });
-  const row = await db.mediaAsset.findUnique({ where: { id } });
+  const { rows: [row] } = await query<MediaAsset>(
+    `SELECT * FROM vijaya."MediaAsset" WHERE "id" = $1`,
+    [id],
+  );
   if (!row || row.filename !== file || path.basename(file) !== file) return new Response(null, { status: 404 });
   const privateFile = row.mime === "application/pdf" || row.storageBucket === documentsBucket();
   if (privateFile) {

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { db } from "@/lib/db";
+import { randomUUID } from "node:crypto";
+import { query } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
@@ -17,14 +18,15 @@ export async function POST(req: Request) {
     const body = await req.json();
     const name = String(body?.name || "");
     if (!ALLOWED.has(name)) return NextResponse.json({ ok: true, skipped: true });
-    await db.analyticsEvent.create({
-      data: {
-        name,
-        path: body?.path ? String(body.path).slice(0, 200) : null,
-        sessionId: body?.sessionId ? String(body.sessionId).slice(0, 60) : null,
-        metaJson: body?.meta ? JSON.stringify(body.meta).slice(0, 2000) : null,
-      },
-    });
+    await query(
+      `INSERT INTO vijaya."AnalyticsEvent" ("id", "name", "path", "sessionId", "metaJson", "createdAt")
+       VALUES ($1, $2, $3, $4, $5, now())`,
+      [
+        randomUUID(), name, body?.path ? String(body.path).slice(0, 200) : null,
+        body?.sessionId ? String(body.sessionId).slice(0, 60) : null,
+        body?.meta ? JSON.stringify(body.meta).slice(0, 2000) : null,
+      ],
+    );
     return NextResponse.json({ ok: true });
   } catch {
     // Analytics must never fail the UX.

@@ -14,14 +14,15 @@
  * pushes confirmed online bookings out via crmSyncBooking().
  */
 
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
+import type { PoolClient } from "pg";
 import { publicAmounts } from "@/lib/booking/amounts";
 import { bookingTransaction } from "@/lib/booking/transaction";
 import { expireHolds, expireIn, heldStatuses, isSlotConflict, matchesRange, physicalSpaces, reserve, slotRange } from "@/lib/booking/state";
 import { priceConfig } from "@/lib/booking/price-config";
 import { indiaDate, intervals } from "@/lib/booking/slots";
-import type { Prisma } from "@prisma/client";
-import { db } from "@/lib/db";
+import { getPool, query } from "@/lib/db";
+import type { Booking, SlotState, Space } from "@/lib/db/types";
 import { COMBO_RULES, SPACE_BY_SLUG } from "@/lib/data/spaces";
 import { BOOKING_CONFIG, type SlotId } from "@/lib/site-config";
 import { siteContent } from "@/lib/content";
@@ -50,11 +51,13 @@ function comboFor(slug: string) {
 }
 
 async function statusesFor(slugs: string[], date: string, slot: SlotId, venue: string) {
-  const range = await slotRange(db, venue, slot);
+  const range = await slotRange(getPool(), venue, slot);
   if (!range) return null;
-  const rows = await db.slotState.findMany({
-    where: { spaceId: { in: slugs }, date, status: { not: "CANCELLED" } },
-  });
+  const { rows } = await query<SlotState>(
+    `SELECT * FROM vijaya."SlotState"
+     WHERE "spaceId" = ANY($1::text[]) AND "date" = $2 AND "status" <> 'CANCELLED'`,
+    [slugs, date],
+  );
   return rows.filter((row) => matchesRange(row, range));
 }
 
@@ -70,7 +73,9 @@ export async function checkAvailability(opts: {
 }): Promise<{ spaces: SpaceAvailability[]; crmNotice: string | null }> {
   await sweepExpiredHolds();
 
-  const active = await db.space.findMany({ where: { active: true, availabilityEnabled: true, bookableOnline: true } });
+  const { rows: active } = await query<Space>(
+    `SELECT * FROM vijaya."Space" WHERE "active" AND "availabilityEnabled" AND "bookableOnline"`,
+  );
   const spaces = active.flatMap((venue) => {
     const existing = SPACE_BY_SLUG[venue.id];
     const bounds: [number, number] | null = venue.capacityMin !== null && venue.capacityMax !== null ? [venue.capacityMin, venue.capacityMax] : null;
@@ -117,15 +122,24 @@ export async function getMonthAvailability(
   venueId?: string,
 ): Promise<Record<string, { free: number; total: number; sessions: Record<SlotId, number> }>> {
   await sweepExpiredHolds();
-  const spaces = (await db.space.findMany({ where: { active: true, availabilityEnabled: true, bookableOnline: true, id: venueId } }))
+  const { rows: availableSpaces } = await query<Space>(
+    `SELECT * FROM vijaya."Space"
+     WHERE "active" AND "availabilityEnabled" AND "bookableOnline"
+       AND ($1::text IS NULL OR "id" = $1)`,
+    [venueId ?? null],
+  );
+  const spaces = availableSpaces
     .filter((s) => !guests || (guests >= (s.capacityMin ?? 0) && guests <= (s.capacityMax ?? Infinity)));
-  const configs = await db.sessionConfig.findMany();
+  const { rows: configs } = await query<{ spaceId: string; key: string; enabled: boolean; startMinute: number; endMinute: number }>(
+    `SELECT "spaceId", "key", "enabled", "startMinute", "endMinute" FROM vijaya."SessionConfig"`,
+  );
   const allSlots = ["MORNING", "AFTERNOON", "EVENING", "FULL_DAY"] as const;
   const from = `${month}-01`;
   const to = `${month}-31`;
-  const rows = await db.slotState.findMany({
-    where: { date: { gte: from, lte: to }, status: { not: "CANCELLED" } },
-  });
+  const { rows } = await query<SlotState>(
+    `SELECT * FROM vijaya."SlotState" WHERE "date" BETWEEN $1 AND $2 AND "status" <> 'CANCELLED'`,
+    [from, to],
+  );
   const byDate: Record<string, { free: number; total: number; sessions: Record<SlotId, number> }> = {};
   const days = daysInMonth(month);
   for (const d of days) {
@@ -179,14 +193,19 @@ export async function createTemporaryHold(
   try {
     return await bookingTransaction(async (tx) => {
       await expireIn(tx);
-      const booked = requestKey && await tx.booking.findUnique({ where: { requestKey } });
+      const { rows: [booked] } = requestKey
+        ? await tx.query<Booking>(`SELECT * FROM vijaya."Booking" WHERE "requestKey" = $1`, [requestKey])
+        : { rows: [] as Booking[] };
       if (booked) {
         if (booked.requestHash !== requestHash) return { ok: false, code: "IDEMPOTENCY_CONFLICT", message: "Use a new request key for a different booking." };
         const amounts = publicAmounts(booked);
 
         return { ok: true, reference: booked.reference, holdExpiresAt: booked.holdExpiresAt?.toISOString() ?? null, spaceName: booked.spaceName, amounts: { ...amounts, balanceDue: amounts.totalContract - amounts.totalPayable } };
       }
-      const space = await tx.space.findUnique({ where: { id: input.spaceSlug } });
+      const { rows: [space] } = await tx.query<Space>(
+        `SELECT * FROM vijaya."Space" WHERE "id" = $1`,
+        [input.spaceSlug],
+      );
       if (!space?.active || (!options.actorId && (!space.bookableOnline || !space.availabilityEnabled))) {
         return { ok: false, code: "NOT_BOOKABLE", message: "This space cannot be booked. Please contact our events team." };
       }
@@ -207,19 +226,65 @@ export async function createTemporaryHold(
         source: options.actorId ? "OPS" : "ONLINE", holdExpiresAt: expires,
       });
       const amounts = quoteFor(space.id, input.date, input.slot, space.pricingJson, extras);
-      const booking = await tx.booking.create({ data: {
-        ...bookingRange, reference, requestKey, requestHash, spaceId: space.id, spaceName: space.name,
-        eventType: input.eventType, eventDate: input.date, slot: input.slot, guests: input.guests,
-        status: options.confirm ? "CONFIRMED" : "PENDING_HOLD", source: options.actorId ? "ADMIN" : "WEB", createdById: options.actorId,
-        confirmedAt: options.confirm ? new Date() : null, crmSync: options.confirm ? "QUEUED" : "NOT_CONNECTED",
+      const bookingData = {
+        ...bookingRange,
+        reference,
+        requestKey: requestKey ?? null,
+        requestHash,
+        spaceId: space.id,
+        spaceName: space.name,
+        eventType: input.eventType,
+        eventDate: input.date,
+        slot: input.slot,
+        guests: input.guests,
+        status: options.confirm ? "CONFIRMED" : "PENDING_HOLD",
+        source: options.actorId ? "ADMIN" : "WEB",
+        createdById: options.actorId ?? null,
+        confirmedAt: options.confirm ? new Date() : null,
+        crmSync: options.confirm ? "QUEUED" : "NOT_CONNECTED",
         customerName: input.customer?.name ?? "— (hold placed, details pending)",
-        customerPhone: input.customer?.phone ?? "", customerEmail: input.customer?.email ?? "",
-        customerCountry: input.customer?.country ?? "India", notes: input.customer?.notes, addons: addOns.length ? addOns : undefined,
-        baseAmount: amounts.base, weekendUplift: amounts.weekendUplift, taxAmount: amounts.tax,
-        depositAmount: amounts.deposit, totalPayable: amounts.totalPayable, holdExpiresAt: expires,
-      } });
+        customerPhone: input.customer?.phone ?? "",
+        customerEmail: input.customer?.email ?? "",
+        customerCountry: input.customer?.country ?? "India",
+        notes: input.customer?.notes ?? null,
+        addons: addOns.length ? JSON.stringify(addOns) : null,
+        baseAmount: amounts.base,
+        weekendUplift: amounts.weekendUplift,
+        taxAmount: amounts.tax,
+        depositAmount: amounts.deposit,
+        totalPayable: amounts.totalPayable,
+        holdExpiresAt: expires ?? null,
+      };
+      const { rows: [booking] } = await tx.query<Booking>(
+        `INSERT INTO vijaya."Booking"
+          ("id", "reference", "spaceId", "spaceName", "childSpaceIds", "eventType", "eventDate", "slot", "guests",
+           "status", "crmSync", "customerName", "customerPhone", "customerEmail", "source", "createdById",
+           "requestKey", "requestHash", "startAt", "endAt", "customerCountry", "notes", "baseAmount", "weekendUplift",
+           "taxAmount", "depositAmount", "totalPayable", "addons", "holdExpiresAt", "confirmedAt", "createdAt", "updatedAt")
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::vijaya."BookingStatus",$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28::jsonb,$29,$30,now(),now())
+         RETURNING *`,
+        [
+          randomUUID(), bookingData.reference, bookingData.spaceId, bookingData.spaceName,
+          bookingData.childSpaceIds, bookingData.eventType, bookingData.eventDate, bookingData.slot,
+          bookingData.guests, bookingData.status, bookingData.crmSync, bookingData.customerName,
+          bookingData.customerPhone, bookingData.customerEmail, bookingData.source, bookingData.createdById,
+          bookingData.requestKey, bookingData.requestHash, bookingData.startAt, bookingData.endAt,
+          bookingData.customerCountry, bookingData.notes, bookingData.baseAmount, bookingData.weekendUplift,
+          bookingData.taxAmount, bookingData.depositAmount, bookingData.totalPayable, bookingData.addons,
+          bookingData.holdExpiresAt, bookingData.confirmedAt,
+        ],
+      );
+      if (!booking) throw new Error("Booking insert returned no row.");
       if (options.confirm) await createPortalDocuments(tx, booking.id, reference, booking.eventDate, false);
-      await tx.auditLog.create({ data: { action: options.confirm ? "BOOKING_CREATED" : "HOLD_CREATED", entity: "Booking", entityRef: reference, actorId: options.actorId, ip: options.ip, afterJson: JSON.stringify({ space: space.id, date: input.date, slot: input.slot }) } });
+      await tx.query(
+        `INSERT INTO vijaya."AuditLog" ("id", "action", "entity", "entityRef", "actorId", "ip", "afterJson", "createdAt")
+         VALUES ($1, $2, 'Booking', $3, $4, $5, $6, now())`,
+        [
+          randomUUID(), options.confirm ? "BOOKING_CREATED" : "HOLD_CREATED", reference,
+          options.actorId ?? null, options.ip ?? null,
+          JSON.stringify({ space: space.id, date: input.date, slot: input.slot }),
+        ],
+      );
       return { ok: true, reference, holdExpiresAt: expires?.toISOString() ?? null, spaceName: space.name, amounts };
     });
   } catch (error) {
@@ -228,15 +293,25 @@ export async function createTemporaryHold(
   }
 }
 
-export async function createPortalDocuments(tx: Prisma.TransactionClient, bookingId: string, reference: string, date: string, paid: boolean) {
-  if (await tx.document.count({ where: { bookingId } })) return;
+export async function createPortalDocuments(tx: PoolClient, bookingId: string, reference: string, date: string, paid: boolean) {
+  const { rows: [{ count }] } = await tx.query<{ count: number }>(
+    `SELECT count(*)::int AS count FROM vijaya."Document" WHERE "bookingId" = $1`,
+    [bookingId],
+  );
+  if (count) return;
   const kinds = [
     ["CONFIRMATION", "Booking Confirmation"],
     ["INVOICE", "Invoice — " + reference],
     ["AGREEMENT", "Venue Booking Agreement"],
     ...(paid ? [["RECEIPT", "Payment Receipt"]] : []),
   ];
-  await tx.document.createMany({ data: kinds.map(([type, title]) => ({ bookingId, type, title })) });
+  for (const [type, title] of kinds) {
+    await tx.query(
+      `INSERT INTO vijaya."Document" ("id", "bookingId", "type", "title", "createdAt")
+       VALUES ($1, $2, $3, $4, now())`,
+      [randomUUID(), bookingId, type, title],
+    );
+  }
   const milestones = [
     { order: 60, title: "Planning consultation", detail: "Meet your event manager and shape the run of show." },
     { order: 30, title: "Vendor coordination", detail: "Share your vendor list and timelines with the VIJAYA team." },
@@ -244,24 +319,55 @@ export async function createPortalDocuments(tx: Prisma.TransactionClient, bookin
     { order: 7, title: "Final walkthrough", detail: "Walk the space with your event manager and sign off the plan." },
     { order: 0, title: "Your event day", detail: "Welcome to VIJAYA. We will take it from here." },
   ];
-  await tx.milestone.createMany({ data: milestones.map((milestone) => ({
-    ...milestone, bookingId, dueDate: new Date(Date.parse(date + "T00:00:00Z") - milestone.order * 86400000).toISOString().slice(0, 10),
-  })) });
+  for (const milestone of milestones) {
+    const dueDate = new Date(Date.parse(date + "T00:00:00Z") - milestone.order * 86400000).toISOString().slice(0, 10);
+    await tx.query(
+      `INSERT INTO vijaya."Milestone" ("id", "bookingId", "title", "detail", "dueDate", "status", "order", "createdAt")
+       VALUES ($1, $2, $3, $4, $5, 'UPCOMING', $6, now())`,
+      [randomUUID(), bookingId, milestone.title, milestone.detail, dueDate, milestone.order],
+    );
+  }
 }
 
-export async function confirmIn(tx: Prisma.TransactionClient, reference: string, options: { actorId?: string; ip?: string; paymentRef?: string } = {}) {
-  const booking = await tx.booking.findUnique({ where: { reference } });
+export async function confirmIn(tx: PoolClient, reference: string, options: { actorId?: string; ip?: string; paymentRef?: string } = {}) {
+  const { rows: [booking] } = await tx.query<Booking>(
+    `SELECT * FROM vijaya."Booking" WHERE "reference" = $1`,
+    [reference],
+  );
   if (!booking) return false;
   if (booking.status === "CONFIRMED") return true;
   const awaitingStaff = booking.status === "PENDING_APPROVAL" && !!options.actorId;
   const activeHold = heldStatuses.includes(booking.status) && booking.holdExpiresAt && booking.holdExpiresAt > new Date();
   if (!awaitingStaff && !activeHold) return false;
-  const locks = await tx.slotState.count({ where: { bookingRef: reference, source: { in: ["ONLINE", "OPS"] } } });
+  const { rows: [{ count: locks }] } = await tx.query<{ count: number }>(
+    `SELECT count(*)::int AS count FROM vijaya."SlotState"
+     WHERE "bookingRef" = $1 AND "source" = ANY($2::text[])`,
+    [reference, ["ONLINE", "OPS"]],
+  );
   if (locks !== physicalSpaces(booking.spaceId).length) return false;
-  await tx.booking.update({ where: { id: booking.id }, data: { status: "CONFIRMED", confirmedAt: new Date(), holdExpiresAt: null, crmSync: "QUEUED" } });
-  await tx.slotState.updateMany({ where: { bookingRef: reference, source: { in: ["ONLINE", "OPS"] } }, data: { status: "CONFIRMED", holdExpiresAt: null } });
+  await tx.query(
+    `UPDATE vijaya."Booking"
+     SET "status" = 'CONFIRMED', "confirmedAt" = now(), "holdExpiresAt" = NULL, "crmSync" = 'QUEUED', "updatedAt" = now()
+     WHERE "id" = $1`,
+    [booking.id],
+  );
+  await tx.query(
+    `UPDATE vijaya."SlotState"
+     SET "status" = 'CONFIRMED', "holdExpiresAt" = NULL, "updatedAt" = now()
+     WHERE "bookingRef" = $1 AND "source" = ANY($2::text[])`,
+    [reference, ["ONLINE", "OPS"]],
+  );
   await createPortalDocuments(tx, booking.id, reference, booking.eventDate, !!options.paymentRef);
-  await tx.auditLog.create({ data: { action: "BOOKING_CONFIRMED", entity: "Booking", entityRef: reference, actorId: options.actorId, ip: options.ip, beforeJson: JSON.stringify({ status: booking.status }), afterJson: JSON.stringify({ status: "CONFIRMED", paymentRef: options.paymentRef }) } });
+  await tx.query(
+    `INSERT INTO vijaya."AuditLog"
+      ("id", "action", "entity", "entityRef", "actorId", "ip", "beforeJson", "afterJson", "createdAt")
+     VALUES ($1, 'BOOKING_CONFIRMED', 'Booking', $2, $3, $4, $5, $6, now())`,
+    [
+      randomUUID(), reference, options.actorId ?? null, options.ip ?? null,
+      JSON.stringify({ status: booking.status }),
+      JSON.stringify({ status: "CONFIRMED", paymentRef: options.paymentRef }),
+    ],
+  );
   return true;
 }
 
@@ -276,20 +382,38 @@ export async function crmApplySync(payload: {
   try {
     return await bookingTransaction(async (tx) => {
       await expireIn(tx);
-      const space = await tx.space.findUnique({ where: { id: payload.spaceId } });
+      const { rows: [space] } = await tx.query<Space>(
+        `SELECT * FROM vijaya."Space" WHERE "id" = $1`,
+        [payload.spaceId],
+      );
       const range = space && await slotRange(tx, payload.spaceId, payload.slot);
       if (!range) return { ok: false, message: "Unknown venue or session." };
       const groupId = `crm:${payload.spaceId}:${payload.date}:${payload.slot}`;
       const legacy = { source: "OFFLINE_CRM", spaceId: payload.spaceId, date: payload.date, slot: payload.slot, groupId: null };
       if (payload.action === "RELEASE") {
-        await tx.slotState.deleteMany({ where: { OR: [{ source: "OFFLINE_CRM", groupId }, legacy] } });
+        await tx.query(
+          `DELETE FROM vijaya."SlotState"
+           WHERE "source" = 'OFFLINE_CRM'
+             AND ("groupId" = $1 OR ("spaceId" = $2 AND "date" = $3 AND "slot" = $4 AND "groupId" IS NULL))`,
+          [groupId, legacy.spaceId, legacy.date, legacy.slot],
+        );
       } else {
         const status = payload.action === "BOOK" ? "CONFIRMED" : "BLOCKED";
-        const existing = await tx.slotState.findFirst({ where: { OR: [{ source: "OFFLINE_CRM", groupId }, legacy] } });
+        const { rows: [existing] } = await tx.query<SlotState>(
+          `SELECT * FROM vijaya."SlotState"
+           WHERE "source" = 'OFFLINE_CRM'
+             AND ("groupId" = $1 OR ("spaceId" = $2 AND "date" = $3 AND "slot" = $4 AND "groupId" IS NULL))
+           LIMIT 1`,
+          [groupId, legacy.spaceId, legacy.date, legacy.slot],
+        );
         if (existing) return { ok: existing.status === status && existing.bookingRef === (payload.bookingRef ?? null), message: "A CRM reservation already exists for this session." };
         await reserve(tx, { spaceSlug: payload.spaceId, date: payload.date, slot: payload.slot, range, status, source: "OFFLINE_CRM", groupId, note: payload.note, bookingRef: payload.bookingRef });
       }
-      await tx.auditLog.create({ data: { action: `CRM_${payload.action}`, entity: "SlotState", entityRef: groupId } });
+      await tx.query(
+        `INSERT INTO vijaya."AuditLog" ("id", "action", "entity", "entityRef", "createdAt")
+         VALUES ($1, $2, 'SlotState', $3, now())`,
+        [randomUUID(), `CRM_${payload.action}`, groupId],
+      );
       return { ok: true, message: "Availability updated." };
     });
   } catch (error) {

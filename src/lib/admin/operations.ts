@@ -2,7 +2,12 @@ import { invalidateContent } from "@/lib/cms/revalidate";
 import { totalContract } from "@/lib/booking/amounts";
 import { hash } from "bcryptjs";
 import { z } from "zod";
-import { db } from "@/lib/db";
+import { randomUUID } from "node:crypto";
+import { query } from "@/lib/db";
+import type {
+  AdminUser, AuditLog, Booking, CustomerNote, Lead, Payment,
+  SessionConfig, SlotState, Space,
+} from "@/lib/db/types";
 import { bookingTransaction } from "@/lib/booking/transaction";
 import { dates, indiaDate } from "@/lib/booking/slots";
 import { expireHolds } from "@/lib/booking/state";
@@ -25,12 +30,20 @@ const sessionInput = z.object({
 }).refine((x) => x.startMinute < x.endMinute && (x.key !== "FULL_DAY" || (x.startMinute === 0 && x.endMinute === 1440)));
 
 export async function venues(req: Request, actor: Identity, id?: string) {
-  if (req.method === "GET") return success(await db.space.findMany({ orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }));
+  if (req.method === "GET") {
+    const { rows } = await query<Space>(`SELECT * FROM vijaya."Space" ORDER BY "sortOrder" ASC, "name" ASC`);
+    return success(rows);
+  }
   if (req.method === "DELETE") {
     const archived = await bookingTransaction(async (tx) => {
-      const before = id && await tx.space.findUnique({ where: { id } });
+      const { rows: [before] } = await tx.query<Space>(`SELECT * FROM vijaya."Space" WHERE "id" = $1`, [id]);
       if (!before) return failure(404, "NOT_FOUND", "Venue not found.");
-      const after = await tx.space.update({ where: { id: before.id }, data: { active: false, bookableOnline: false } });
+      const { rows: [after] } = await tx.query<Space>(
+        `UPDATE vijaya."Space" SET "active" = false, "bookableOnline" = false, "updatedAt" = now()
+         WHERE "id" = $1 RETURNING *`,
+        [before.id],
+      );
+      if (!after) throw new Error("Venue archive returned no row.");
       await audit(tx, actor, "VENUE_ARCHIVED", "Space", before.id, before, after);
       return success(after);
     });
@@ -41,9 +54,25 @@ export async function venues(req: Request, actor: Identity, id?: string) {
   if (!result.success) return failure(422, "INVALID_VENUE", "Check the venue fields and capacity range.", result.error.issues);
   const { id: venueId, pricing, ...values } = result.data;
   const saved = await bookingTransaction(async (tx) => {
-    const before = await tx.space.findUnique({ where: { id: venueId } });
-    const data = { ...values, pricingJson: pricing ? JSON.stringify(pricing) : undefined };
-    const after = await tx.space.upsert({ where: { id: venueId }, create: { id: venueId, ...data }, update: data });
+    const { rows: [before] } = await tx.query<Space>(`SELECT * FROM vijaya."Space" WHERE "id" = $1`, [venueId]);
+    const { rows: [after] } = await tx.query<Space>(
+      `INSERT INTO vijaya."Space"
+        ("id","name","category","setting","description","capacityMin","capacityMax","sortOrder","active",
+         "requiresApproval","bookableOnline","availabilityEnabled","pricingJson","updatedAt")
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,now())
+       ON CONFLICT ("id") DO UPDATE SET
+         "name" = EXCLUDED."name", "category" = EXCLUDED."category", "setting" = EXCLUDED."setting",
+         "description" = EXCLUDED."description", "capacityMin" = EXCLUDED."capacityMin", "capacityMax" = EXCLUDED."capacityMax",
+         "sortOrder" = EXCLUDED."sortOrder", "active" = EXCLUDED."active", "requiresApproval" = EXCLUDED."requiresApproval",
+         "bookableOnline" = EXCLUDED."bookableOnline", "availabilityEnabled" = EXCLUDED."availabilityEnabled",
+         "pricingJson" = CASE WHEN $13::text IS NULL THEN vijaya."Space"."pricingJson" ELSE EXCLUDED."pricingJson" END,
+         "updatedAt" = now()
+       RETURNING *`,
+      [venueId, values.name, values.category, values.setting, values.description ?? null, values.capacityMin,
+        values.capacityMax, values.sortOrder, values.active, values.requiresApproval, values.bookableOnline,
+        values.availabilityEnabled, pricing ? JSON.stringify(pricing) : null],
+    );
+    if (!after) throw new Error("Venue write returned no row.");
     await audit(tx, actor, before ? "VENUE_UPDATED" : "VENUE_CREATED", "Space", venueId, before, after);
     return success(after);
   });
@@ -52,15 +81,29 @@ export async function venues(req: Request, actor: Identity, id?: string) {
 }
 
 export async function sessions(req: Request, actor: Identity) {
-  if (req.method === "GET") return success(await db.sessionConfig.findMany({ orderBy: [{ spaceId: "asc" }, { startMinute: "asc" }] }));
+  if (req.method === "GET") {
+    const { rows } = await query<SessionConfig>(`SELECT * FROM vijaya."SessionConfig" ORDER BY "spaceId" ASC, "startMinute" ASC`);
+    return success(rows);
+  }
   const parsed = sessionInput.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return failure(422, "INVALID_SESSION", "Enter a valid date-independent session between minute 0 and 1440.");
   const { spaceId, key, ...fields } = parsed.data;
   return bookingTransaction(async (tx) => {
-    if (!await tx.space.findUnique({ where: { id: spaceId } })) return failure(404, "NOT_FOUND", "Venue not found.");
-    const where = { spaceId_key: { spaceId, key } };
-    const before = await tx.sessionConfig.findUnique({ where });
-    const after = await tx.sessionConfig.upsert({ where, create: { spaceId, key, ...fields }, update: fields });
+    const { rows: [space] } = await tx.query<{ id: string }>(`SELECT "id" FROM vijaya."Space" WHERE "id" = $1`, [spaceId]);
+    if (!space) return failure(404, "NOT_FOUND", "Venue not found.");
+    const { rows: [before] } = await tx.query<SessionConfig>(
+      `SELECT * FROM vijaya."SessionConfig" WHERE "spaceId" = $1 AND "key" = $2`,
+      [spaceId, key],
+    );
+    const { rows: [after] } = await tx.query<SessionConfig>(
+      `INSERT INTO vijaya."SessionConfig" ("id","spaceId","key","label","startMinute","endMinute","enabled")
+       VALUES ($1,$2,$3,$4,$5,$6,$7)
+       ON CONFLICT ("spaceId","key") DO UPDATE SET "label" = EXCLUDED."label", "startMinute" = EXCLUDED."startMinute",
+         "endMinute" = EXCLUDED."endMinute", "enabled" = EXCLUDED."enabled"
+       RETURNING *`,
+      [randomUUID(), spaceId, key, fields.label, fields.startMinute, fields.endMinute, fields.enabled],
+    );
+    if (!after) throw new Error("Session config write returned no row.");
     await audit(tx, actor, "SESSION_SAVED", "SessionConfig", after.id, before, after);
     return success(after);
   });
@@ -69,14 +112,25 @@ export async function sessions(req: Request, actor: Identity) {
 const pipeline = z.enum(["NEW", "CONTACTED", "SITE_VISIT", "QUOTED", "WON", "LOST"]);
 const leadInput = z.object({ stage: pipeline, notes: z.string().max(6000).optional(), followUpAt: z.iso.date().nullable().optional() });
 export async function enquiries(req: Request, actor: Identity, id?: string) {
-  if (req.method === "GET") return success(await db.lead.findMany({ orderBy: { createdAt: "desc" }, take: 250 }));
+  if (req.method === "GET") {
+    const { rows } = await query<Lead>(`SELECT * FROM vijaya."Lead" ORDER BY "createdAt" DESC LIMIT 250`);
+    return success(rows);
+  }
   const parsed = leadInput.safeParse(await req.json().catch(() => null));
   if (!id || !parsed.success) return failure(422, "INVALID_ENQUIRY", "Choose a pipeline stage and valid follow-up date.");
   return bookingTransaction(async (tx) => {
-    const before = await tx.lead.findUnique({ where: { id } });
+    const { rows: [before] } = await tx.query<Lead>(`SELECT * FROM vijaya."Lead" WHERE "id" = $1`, [id]);
     if (!before) return failure(404, "NOT_FOUND", "Enquiry not found.");
     const { stage, notes, followUpAt } = parsed.data;
-    const after = await tx.lead.update({ where: { id }, data: { stage, internalNotes: notes, followUpAt: followUpAt ? new Date(followUpAt + "T09:00:00+05:30") : followUpAt } });
+    const date = followUpAt ? new Date(followUpAt + "T09:00:00+05:30") : null;
+    const { rows: [after] } = await tx.query<Lead>(
+      `UPDATE vijaya."Lead"
+       SET "stage" = $2, "internalNotes" = CASE WHEN $3 THEN $4 ELSE "internalNotes" END,
+           "followUpAt" = CASE WHEN $5 THEN $6 ELSE "followUpAt" END
+       WHERE "id" = $1 RETURNING *`,
+      [id, stage, notes !== undefined, notes ?? null, followUpAt !== undefined, date],
+    );
+    if (!after) throw new Error("Lead update returned no row.");
     await audit(tx, actor, "ENQUIRY_UPDATED", "Lead", id, { stage: before.stage, followUpAt: before.followUpAt }, { stage, followUpAt });
     return success(after);
   });
@@ -86,18 +140,41 @@ const customerInput = z.object({ email: z.email().toLowerCase().max(160), note: 
 export async function customers(req: Request, actor: Identity) {
   if (req.method === "GET") {
     const email = z.email().safeParse(new URL(req.url).searchParams.get("email"));
-    if (email.success) return success({
-      bookings: await db.booking.findMany({ where: { customerEmail: email.data }, select: { reference: true, eventDate: true, status: true, spaceName: true, payments: { select: { amount: true, status: true } } }, orderBy: { eventDate: "desc" } }).then((rows) => rows.map((row) => ({ ...row, payments: row.payments.map((payment) => ({ ...payment, amount: Number(payment.amount) })) }))),
-      notes: await db.customerNote.findMany({ where: { email: email.data }, orderBy: { createdAt: "desc" } }),
-    });
-    const rows = await db.booking.groupBy({ by: ["customerEmail"], where: { customerEmail: { not: "" } }, _count: { _all: true }, _max: { customerName: true, eventDate: true }, orderBy: { _max: { eventDate: "desc" } }, take: 200 });
+    if (email.success) {
+      const [{ rows: bookings }, { rows: notes }] = await Promise.all([
+        query<Pick<Booking, "reference" | "eventDate" | "status" | "spaceName"> & { payments: Pick<Payment, "amount" | "status">[] }>(
+          `SELECT b."reference", b."eventDate", b."status"::text AS "status", b."spaceName",
+             COALESCE((SELECT json_agg(json_build_object('amount', p."amount", 'status', p."status"))
+                       FROM vijaya."Payment" p WHERE p."bookingId" = b."id"), '[]'::json) AS payments
+           FROM vijaya."Booking" b WHERE lower(b."customerEmail") = $1 ORDER BY b."eventDate" DESC`,
+          [email.data],
+        ),
+        query<CustomerNote>(`SELECT * FROM vijaya."CustomerNote" WHERE lower("email") = $1 ORDER BY "createdAt" DESC`, [email.data]),
+      ]);
+      return success({ bookings, notes });
+    }
+    const { rows } = await query(
+      `SELECT "customerEmail", count(*) AS "_count", max("customerName") AS "_maxCustomerName",
+         max("eventDate") AS "_maxEventDate"
+       FROM vijaya."Booking" WHERE "customerEmail" <> ''
+       GROUP BY "customerEmail" ORDER BY max("eventDate") DESC LIMIT 200`,
+    );
     return success(rows);
   }
   const parsed = customerInput.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return failure(422, "INVALID_NOTE", "Enter a valid customer email and note.");
   return bookingTransaction(async (tx) => {
-    if (!await tx.booking.findFirst({ where: { customerEmail: parsed.data.email } })) return failure(404, "NOT_FOUND", "Customer not found.");
-    const note = await tx.customerNote.create({ data: { ...parsed.data, actorId: actor.admin.id } });
+    const { rows: [booking] } = await tx.query<{ id: string }>(
+      `SELECT "id" FROM vijaya."Booking" WHERE lower("customerEmail") = $1 LIMIT 1`,
+      [parsed.data.email],
+    );
+    if (!booking) return failure(404, "NOT_FOUND", "Customer not found.");
+    const { rows: [note] } = await tx.query<CustomerNote>(
+      `INSERT INTO vijaya."CustomerNote" ("id","email","note","actorId","createdAt")
+       VALUES ($1,$2,$3,$4,now()) RETURNING *`,
+      [randomUUID(), parsed.data.email, parsed.data.note, actor.admin.id],
+    );
+    if (!note) throw new Error("Customer note insert returned no row.");
     await audit(tx, actor, "CUSTOMER_NOTE_ADDED", "CustomerNote", note.id);
     return success(note);
   });
@@ -108,15 +185,30 @@ const password = z.string().min(12).refine((x) => Buffer.byteLength(x) <= 72);
 const adminInput = z.object({ email: z.email().toLowerCase().max(160), name: z.string().trim().min(1).max(120), role: roles, password });
 const adminUpdate = z.object({ role: roles.optional(), disabled: z.boolean().optional(), password: password.optional(), revoke: z.boolean().optional() });
 export async function users(req: Request, actor: Identity, id?: string) {
-  if (req.method === "GET") return success(await db.adminUser.findMany({ select: { ...adminSelect }, orderBy: { email: "asc" } }));
+  if (req.method === "GET") {
+    const { rows } = await query<Pick<AdminUser, "id" | "name" | "email" | "role" | "disabled" | "mustChangePassword" | "createdAt">>(
+      `SELECT "id","name","email","role","disabled","mustChangePassword","createdAt" FROM vijaya."AdminUser" ORDER BY "email" ASC`,
+    );
+    return success(rows);
+  }
   if (req.method === "POST") {
     const checked = adminInput.safeParse(await req.json().catch(() => null));
     if (!checked.success) return failure(422, "INVALID_USER", "Enter an email, role and temporary password of at least 12 characters.");
     const { password, ...details } = checked.data;
     const passwordHash = await hash(password, 12);
     return bookingTransaction(async (tx) => {
-      if (await tx.adminUser.findUnique({ where: { email: details.email } })) return failure(409, "EMAIL_IN_USE", "That email is already registered.");
-      const user = await tx.adminUser.create({ data: { ...details, passwordHash }, select: adminSelect });
+      const { rows: [existing] } = await tx.query<{ id: string }>(
+        `SELECT "id" FROM vijaya."AdminUser" WHERE lower("email") = $1`,
+        [details.email],
+      );
+      if (existing) return failure(409, "EMAIL_IN_USE", "That email is already registered.");
+      const { rows: [user] } = await tx.query<Pick<AdminUser, "id" | "name" | "email" | "role" | "disabled" | "mustChangePassword" | "createdAt">>(
+        `INSERT INTO vijaya."AdminUser" ("id","name","email","role","passwordHash","disabled","mustChangePassword","sessionVersion","createdAt","updatedAt")
+         VALUES ($1,$2,$3,$4,$5,false,true,0,now(),now())
+         RETURNING "id","name","email","role","disabled","mustChangePassword","createdAt"`,
+        [randomUUID(), details.name, details.email, details.role, passwordHash],
+      );
+      if (!user) throw new Error("Admin user insert returned no row.");
       await audit(tx, actor, "ADMIN_CREATED", "AdminUser", user.id, undefined, user);
       return success(user, 201);
     });
@@ -127,13 +219,29 @@ export async function users(req: Request, actor: Identity, id?: string) {
   if (actor.admin.id === id && (role && role !== "SUPER_ADMIN" || disabled || temporary)) return failure(409, "SELF_UPDATE", "Use the password page for your own account. You cannot disable or demote yourself.");
   const passwordHash = temporary ? await hash(temporary, 12) : undefined;
   return bookingTransaction(async (tx) => {
-    const before = await tx.adminUser.findUnique({ where: { id }, select: adminSelect });
+    const { rows: [before] } = await tx.query<Pick<AdminUser, "id" | "name" | "email" | "role" | "disabled" | "mustChangePassword" | "createdAt">>(
+      `SELECT "id","name","email","role","disabled","mustChangePassword","createdAt" FROM vijaya."AdminUser" WHERE "id" = $1`,
+      [id],
+    );
     if (!before) return failure(404, "NOT_FOUND", "Account not found.");
     if (before.role === "SUPER_ADMIN" && !before.disabled && (disabled || (role && role !== "SUPER_ADMIN"))) {
-      if (await tx.adminUser.count({ where: { role: "SUPER_ADMIN", disabled: false } }) <= 1) return failure(409, "LAST_ADMIN", "The last active Super Admin cannot be removed.");
+      const { rows: [count] } = await tx.query<{ count: string }>(
+        `SELECT count(*)::text AS count FROM vijaya."AdminUser" WHERE "role" = 'SUPER_ADMIN' AND "disabled" = false`,
+      );
+      if (Number(count?.count ?? 0) <= 1) return failure(409, "LAST_ADMIN", "The last active Super Admin cannot be removed.");
     }
-    const after = await tx.adminUser.update({ where: { id }, data: { role, disabled, passwordHash, mustChangePassword: temporary ? true : undefined, sessionVersion: { increment: 1 } }, select: adminSelect });
-    await tx.adminSession.deleteMany({ where: { adminId: id } });
+    const { rows: [after] } = await tx.query<Pick<AdminUser, "id" | "name" | "email" | "role" | "disabled" | "mustChangePassword" | "createdAt">>(
+      `UPDATE vijaya."AdminUser"
+       SET "role" = COALESCE($2,"role"), "disabled" = COALESCE($3,"disabled"),
+           "passwordHash" = COALESCE($4,"passwordHash"),
+           "mustChangePassword" = CASE WHEN $5 THEN true ELSE "mustChangePassword" END,
+           "sessionVersion" = "sessionVersion" + 1, "updatedAt" = now()
+       WHERE "id" = $1
+       RETURNING "id","name","email","role","disabled","mustChangePassword","createdAt"`,
+      [id, role ?? null, disabled ?? null, passwordHash ?? null, temporary !== undefined],
+    );
+    if (!after) throw new Error("Admin user update returned no row.");
+    await tx.query(`DELETE FROM vijaya."AdminSession" WHERE "adminId" = $1`, [id]);
     await audit(tx, actor, "ADMIN_UPDATED", "AdminUser", id, before, after);
     return success(after);
   });
@@ -147,11 +255,14 @@ export async function calendar(req: Request) {
   }
   await expireHolds();
   const { from, to, venue } = checked.data;
-  return success(await db.slotState.findMany({
-    where: { date: { gte: from, lte: to }, spaceId: venue, status: { not: "CANCELLED" } },
-    orderBy: [{ date: "asc" }, { spaceId: "asc" }, { startMinute: "asc" }],
-    include: { space: { select: { name: true } } },
-  }));
+  const { rows } = await query<SlotState & { space: { name: string } }>(
+    `SELECT s.*, json_build_object('name', p."name") AS space
+     FROM vijaya."SlotState" s JOIN vijaya."Space" p ON p."id" = s."spaceId"
+     WHERE s."date" BETWEEN $1 AND $2 AND ($3::text IS NULL OR s."spaceId" = $3) AND s."status" <> 'CANCELLED'
+     ORDER BY s."date" ASC, s."spaceId" ASC, s."startMinute" ASC`,
+    [from, to, venue ?? null],
+  );
+  return success(rows);
 }
 
 export async function dashboard() {
@@ -161,12 +272,31 @@ export async function dashboard() {
   const end = (days: number) => indiaDate(new Date(now.getTime() + days * 86400000));
   const yearAgo = end(-365);
   const monthStart = `${today.slice(0, 7)}-01`;
-  const [bookings, monthly, newEnquiries, expiring] = await Promise.all([
-    db.booking.findMany({ where: { OR: [{ eventDate: { gte: yearAgo } }, { status: "CONFIRMED" }] }, include: { payments: true }, orderBy: { eventDate: "asc" } }),
-    db.payment.findMany({ where: { status: "SUCCESS", createdAt: { gte: new Date(monthStart + "T00:00:00+05:30") } }, select: { amount: true } }),
-    db.lead.count({ where: { stage: { in: ["NEW", "New Lead"] } } }),
-    db.booking.findMany({ where: { holdExpiresAt: { gt: now, lte: new Date(now.getTime() + 15 * 60_000) } }, take: 10, orderBy: { holdExpiresAt: "asc" }, select: { reference: true, eventDate: true, spaceName: true, holdExpiresAt: true } }),
+  const [bookingResult, monthlyResult, leadResult, expiringResult] = await Promise.all([
+    query<Booking & { payments: Payment[] }>(
+      `SELECT b.*,
+         COALESCE((SELECT json_agg(p) FROM vijaya."Payment" p WHERE p."bookingId" = b."id"), '[]'::json) AS payments
+       FROM vijaya."Booking" b WHERE b."eventDate" >= $1 OR b."status" = 'CONFIRMED' ORDER BY b."eventDate" ASC`,
+      [yearAgo],
+    ),
+    query<Pick<Payment, "amount">>(
+      `SELECT "amount" FROM vijaya."Payment" WHERE "status" = 'SUCCESS' AND "createdAt" >= $1`,
+      [new Date(monthStart + "T00:00:00+05:30")],
+    ),
+    query<{ count: string }>(
+      `SELECT count(*)::text AS count FROM vijaya."Lead" WHERE "stage" = ANY($1::text[])`,
+      [["NEW", "New Lead"]],
+    ),
+    query<Pick<Booking, "reference" | "eventDate" | "spaceName" | "holdExpiresAt">>(
+      `SELECT "reference","eventDate","spaceName","holdExpiresAt" FROM vijaya."Booking"
+       WHERE "holdExpiresAt" > $1 AND "holdExpiresAt" <= $2 ORDER BY "holdExpiresAt" ASC LIMIT 10`,
+      [now, new Date(now.getTime() + 15 * 60_000)],
+    ),
   ]);
+  const bookings = bookingResult.rows;
+  const monthly = monthlyResult.rows;
+  const newEnquiries = Number(leadResult.rows[0]?.count ?? 0);
+  const expiring = expiringResult.rows;
   const confirmed = bookings.filter((b) => b.status === "CONFIRMED");
   const pending = bookings.filter((b) => ["PENDING_HOLD", "PENDING_PAYMENT", "PENDING_APPROVAL"].includes(b.status));
   const group = (values: string[]) => Array.from(values.reduce((map, value) => map.set(value, (map.get(value) ?? 0) + 1), new Map<string, number>()), ([name, count]) => ({ name, count }));
@@ -192,9 +322,16 @@ export async function dashboard() {
 }
 
 export async function auditLog(req: Request) {
-  const query = new URL(req.url).searchParams;
-  const where = { entity: query.get("entity")?.slice(0, 100) || undefined, action: query.get("action")?.slice(0, 100) || undefined };
-  const rows = await db.auditLog.findMany({ where, orderBy: { createdAt: "desc" }, take: query.get("export") === "json" ? 5000 : 200 });
-  if (query.get("export") === "json") return new Response(JSON.stringify(rows), { headers: { "Content-Type": "application/json", "Content-Disposition": 'attachment; filename="vijaya-audit.json"', "Cache-Control": "no-store" } });
+  const params = new URL(req.url).searchParams;
+  const entity = params.get("entity")?.slice(0, 100) || null;
+  const action = params.get("action")?.slice(0, 100) || null;
+  const limit = params.get("export") === "json" ? 5000 : 200;
+  const { rows } = await query<AuditLog>(
+    `SELECT * FROM vijaya."AuditLog"
+     WHERE ($1::text IS NULL OR "entity" = $1) AND ($2::text IS NULL OR "action" = $2)
+     ORDER BY "createdAt" DESC LIMIT $3`,
+    [entity, action, limit],
+  );
+  if (params.get("export") === "json") return new Response(JSON.stringify(rows), { headers: { "Content-Type": "application/json", "Content-Disposition": 'attachment; filename="vijaya-audit.json"', "Cache-Control": "no-store" } });
   return success(rows);
 }

@@ -1,16 +1,25 @@
-import { db } from "@/lib/db";
+import { query } from "@/lib/db";
+import type { SessionConfig, SlotState, Space } from "@/lib/db/types";
 import { expireHolds, matchesRange, physicalSpaces } from "./state";
 import { intervals } from "./slots";
 
 export async function sessionAvailability(venueId: string, from: string, to: string) {
   await expireHolds();
-  const venue = await db.space.findUnique({ where: { id: venueId } });
+  const { rows: [venue] } = await query<Space>(
+    `SELECT * FROM vijaya."Space" WHERE "id" = $1`,
+    [venueId],
+  );
   if (!venue?.active || !venue.availabilityEnabled) return [];
-  const custom = await db.sessionConfig.findMany({ where: { spaceId: venueId } });
-  const rows = await db.slotState.findMany({
-    where: { spaceId: { in: physicalSpaces(venueId) }, date: { gte: from, lte: to }, status: { not: "CANCELLED" } },
-    select: { date: true, slot: true, startMinute: true, endMinute: true, status: true },
-  });
+  const { rows: custom } = await query<SessionConfig>(
+    `SELECT * FROM vijaya."SessionConfig" WHERE "spaceId" = $1`,
+    [venueId],
+  );
+  const { rows } = await query<Pick<SlotState, "date" | "slot" | "startMinute" | "endMinute" | "status">>(
+    `SELECT "date", "slot", "startMinute", "endMinute", "status"::text AS "status"
+     FROM vijaya."SlotState"
+     WHERE "spaceId" = ANY($1::text[]) AND "date" BETWEEN $2 AND $3 AND "status" <> 'CANCELLED'`,
+    [physicalSpaces(venueId), from, to],
+  );
   const configs = new Map<string, readonly [number, number]>(Object.entries(intervals));
   for (const item of custom) {
     if (item.enabled) configs.set(item.key, [item.startMinute, item.endMinute]);

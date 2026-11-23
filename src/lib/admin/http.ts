@@ -1,4 +1,5 @@
-import type { Prisma } from "@prisma/client";
+import { randomUUID } from "node:crypto";
+import type { PoolClient } from "pg";
 import { currentAdmin, clientIp } from "./auth";
 
 type Role = NonNullable<Awaited<ReturnType<typeof currentAdmin>>>["role"];
@@ -30,9 +31,15 @@ export async function guard(req: Request, allowed: readonly Role[], changingPass
 }
 
 export type Identity = Exclude<Awaited<ReturnType<typeof guard>>, Response>;
-export async function audit(tx: Prisma.TransactionClient, actor: Identity, action: string, entity: string, entityRef: string, before?: unknown, after?: unknown) {
-  return tx.auditLog.create({ data: {
-    action, entity, entityRef, actorId: actor.admin.id, ip: actor.ip,
-    beforeJson: before === undefined ? undefined : JSON.stringify(before), afterJson: after === undefined ? undefined : JSON.stringify(after),
-  } });
+export async function audit(tx: PoolClient, actor: Identity, action: string, entity: string, entityRef: string, before?: unknown, after?: unknown) {
+  return tx.query(
+    `INSERT INTO vijaya."AuditLog"
+      ("id", "action", "entity", "entityRef", "actorId", "ip", "beforeJson", "afterJson", "createdAt")
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now())`,
+    [
+      randomUUID(), action, entity, entityRef, actor.admin.id, actor.ip,
+      before === undefined ? null : JSON.stringify(before),
+      after === undefined ? null : JSON.stringify(after),
+    ],
+  );
 }
