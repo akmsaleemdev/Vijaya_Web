@@ -1,3 +1,6 @@
+CREATE SCHEMA IF NOT EXISTS "vijaya";
+SET search_path TO vijaya, extensions, public;
+
 DO $$
 BEGIN
   IF current_schema() <> 'vijaya' THEN
