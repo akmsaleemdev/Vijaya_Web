@@ -1,10 +1,15 @@
+import { venueContentSchema } from "@/lib/cms/venue-schema";
 import { z } from "zod";
 
 const text = z.string().trim().min(1).max(6000);
 const url = z.string().max(1000).refine((value) => /^\/(?![\\/])/.test(value) && !value.includes("\\") || /^https:\/\//i.test(value), "Use a site path or HTTPS URL.");
-const local = z.string().regex(/^\/(?:media|brand|api\/media)\/[a-zA-Z0-9/_ .%-]+\.(?:jpg|jpeg|png|webp|avif|mp4|webm|pdf)$/i);
+const local = z.string().regex(/^\/(?:media|brand|api\/media)\/[a-zA-Z0-9/_ .%-]+\.(?:jpg|jpeg|png|webp|avif|mp4|webm|pdf)(?:\?v=[a-f0-9]+)?$/i);
 const link = z.object({ label: text, href: url });
 export const contentSchemas = {
+  "home.occasions": z.array(z.object({ href: url, img: local, title: text, alt: text, copy: text })).max(30),
+  "home.destinations": z.array(z.object({ title: text, image: local, href: url })).max(30),
+  "site.experiences": z.array(z.object({ id: z.string().regex(/^[a-z0-9-]+$/), title: text, text, image: local, helipad: z.boolean().optional() })).max(30),
+  "site.scenes": z.array(z.object({ id: text, name: text, image: local, initialYaw: z.number(), hotspots: z.array(z.object({ yaw: z.number(), pitch: z.number(), label: text, target: text })).max(40) })).max(40),
   "home.hero": z.object({ eyebrow: text, heading: text, intro: text, cta: link, poster: local, posterAlt: text, desktop: local, mobile: local }).partial(),
   "gallery.items": z.array(z.object({ src: local, alt: text, category: text, caption: text.optional(), published: z.boolean().optional() })).max(300),
   "site.navigation": z.array(link).max(16),
@@ -25,7 +30,8 @@ const pageContent = z.record(z.string().regex(/^[a-zA-Z0-9_.-]+$/), z.string().m
 const templateContent = z.partialRecord(z.enum(["received", "confirmed", "reminder", "cancelled", "receipt"]), z.object({ subject: z.string().max(160), body: text }));
 export function schemaFor(key: string): z.ZodType | undefined {
   if (key === "email.templates") return templateContent;
-  if (key.startsWith("page.") || key.startsWith("venue.")) return pageContent;
+  if (key.startsWith("venue.")) return venueContentSchema;
+  if (key.startsWith("page.") || key.startsWith("copy.")) return pageContent;
   if (Object.hasOwn(contentSchemas, key)) return contentSchemas[key as keyof typeof contentSchemas];
   return undefined;
 }

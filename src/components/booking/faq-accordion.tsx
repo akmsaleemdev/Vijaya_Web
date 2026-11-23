@@ -1,4 +1,6 @@
 "use client";
+import { useCmsCopy } from "@/lib/cms/client";
+
 
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { useState } from "react";
@@ -7,12 +9,13 @@ import type { FaqItem } from "@/lib/data/content";
 const GROUPS: FaqItem["group"][] = ["Booking", "Planning", "Facilities", "Policies"];
 
 export function FaqAccordion({ items }: { items: FaqItem[] }) {
+  const cmsCopy = useCmsCopy("copy.components.booking.faq-accordion");
   const [group, setGroup] = useState<FaqItem["group"] | "All">("All");
   const filtered = group === "All" ? items : items.filter((i) => i.group === group);
 
   return (
     <div>
-      <div className="flex flex-wrap gap-2 mb-8" role="tablist" aria-label="FAQ groups">
+      <div className="flex flex-wrap gap-2 mb-8" role="tablist" aria-label={cmsCopy("aria-label.faq-groups", "FAQ groups")}>
         {(["All", ...GROUPS] as const).map((g) => (
           <button
             key={g}

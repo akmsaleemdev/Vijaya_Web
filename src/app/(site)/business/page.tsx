@@ -1,3 +1,5 @@
+
+import { getComponentCopy } from "@/lib/cms/read";
 import { pageCopy, pageMetadata } from "@/lib/content";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -6,7 +8,7 @@ import { PageHero } from "@/components/layout/page-hero";
 import { Reveal } from "@/components/motion/reveal";
 import { Media } from "@/components/media/media";
 import { VenueCard } from "@/components/booking/venue-card";
-import { SPACES } from "@/lib/data/spaces";
+import { getPublicVenue } from "@/lib/venue-content";
 
 const metadata: Metadata = {
   title: "Business & MICE",
@@ -26,8 +28,9 @@ const FORMATS = [
 ];
 
 export default async function BusinessPage() {
+  const cmsCopy = await getComponentCopy("copy.app.site.business.page");
   const copy = await pageCopy("business");
-  const spaces = BIZ_SPACES.map((s) => SPACES.find((x) => x.slug === s)!).filter(Boolean);
+  const spaces = (await Promise.all(BIZ_SPACES.map(getPublicVenue))).filter((space) => space !== null);
 
   return (
     <main>
@@ -36,7 +39,7 @@ export default async function BusinessPage() {
         title={copy("title.business-events-run-with-operational-precision", "Business Events, Run With Operational Precision.")}
         intro={copy("intro.conferences-exhibitions-launches-and-leadership-ga", "Conferences, exhibitions, launches and leadership gatherings — clear capacities, AV readiness, parking and access planned as carefully as the programme.")}
         image={copy("image.hero-image-business-page-vijaya-vicc-webp", "/media/Hero Image-Business Page-Vijaya-VICC.webp")}
-        imageAlt="VIJAYA International Convention Centre business conference room"
+        imageAlt={cmsCopy("imageAlt.vijaya-international-convention-centre-busine", "VIJAYA International Convention Centre business conference room")}
         overlayClassName="bg-gradient-to-r from-ink/85 via-ink/45 to-transparent"
         quality={95}
         tag={false}
@@ -172,17 +175,18 @@ export default async function BusinessPage() {
   );
 }
 
-function MaskRevealWrapper() {
+async function MaskRevealWrapper() {
+  const cmsCopy = await getComponentCopy("copy.app.site.business.page");
   return (
     <Reveal delay={0.1}>
       <div className="relative aspect-[4/3] card-editorial overflow-hidden flex items-center justify-center bg-sand/20">
         <div className="absolute inset-0 opacity-60">
-          <Media src="/media/space-boardroom.jpg" alt="Floor plan placeholder — VIJAYA boardroom" sizes="(max-width: 1024px) 100vw, 50vw" tag={false} />
+          <Media src={cmsCopy("src.media-space-boardroom-jpg", "/media/space-boardroom.jpg")} alt={cmsCopy("alt.floor-plan-placeholder-vijaya-boardroom", "Floor plan placeholder — VIJAYA boardroom")} sizes="(max-width: 1024px) 100vw, 50vw" tag={false} />
         </div>
         <div className="relative text-center px-6 py-10 bg-ivory/85 border border-border m-8">
           <Download className="h-5 w-5 text-gold mx-auto" aria-hidden />
-          <p className="mt-3 text-sm font-medium">Floor plan pack</p>
-          <p className="mt-1 text-[12px] text-stone">Published after verified survey approval</p>
+          <p className="mt-3 text-sm font-medium">{cmsCopy("text.floor-plan-pack", "Floor plan pack")}</p>
+          <p className="mt-1 text-[12px] text-stone">{cmsCopy("text.published-after-verified-survey-approval", "Published after verified survey approval")}</p>
         </div>
       </div>
     </Reveal>

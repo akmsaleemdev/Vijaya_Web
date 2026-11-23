@@ -15,6 +15,7 @@
  */
 
 import { createHash, randomBytes } from "node:crypto";
+import { publicAmounts } from "@/lib/booking/amounts";
 import { bookingTransaction } from "@/lib/booking/transaction";
 import { expireHolds, expireIn, heldStatuses, isSlotConflict, matchesRange, physicalSpaces, reserve, slotRange } from "@/lib/booking/state";
 import { priceConfig } from "@/lib/booking/price-config";
@@ -181,8 +182,9 @@ export async function createTemporaryHold(
       const booked = requestKey && await tx.booking.findUnique({ where: { requestKey } });
       if (booked) {
         if (booked.requestHash !== requestHash) return { ok: false, code: "IDEMPOTENCY_CONFLICT", message: "Use a new request key for a different booking." };
-        const amounts = { base: booked.baseAmount, weekendUplift: booked.weekendUplift, tax: booked.taxAmount, deposit: booked.depositAmount, totalPayable: booked.totalPayable, totalContract: booked.baseAmount + booked.weekendUplift + booked.taxAmount, balanceDue: booked.baseAmount + booked.weekendUplift + booked.taxAmount - booked.totalPayable };
-        return { ok: true, reference: booked.reference, holdExpiresAt: booked.holdExpiresAt?.toISOString() ?? null, spaceName: booked.spaceName, amounts };
+        const amounts = publicAmounts(booked);
+
+        return { ok: true, reference: booked.reference, holdExpiresAt: booked.holdExpiresAt?.toISOString() ?? null, spaceName: booked.spaceName, amounts: { ...amounts, balanceDue: amounts.totalContract - amounts.totalPayable } };
       }
       const space = await tx.space.findUnique({ where: { id: input.spaceSlug } });
       if (!space?.active || (!options.actorId && (!space.bookableOnline || !space.availabilityEnabled))) {
@@ -208,11 +210,11 @@ export async function createTemporaryHold(
       const booking = await tx.booking.create({ data: {
         ...bookingRange, reference, requestKey, requestHash, spaceId: space.id, spaceName: space.name,
         eventType: input.eventType, eventDate: input.date, slot: input.slot, guests: input.guests,
-        status: options.confirm ? "CONFIRMED" : "HOLD", source: options.actorId ? "ADMIN" : "WEB", createdById: options.actorId,
+        status: options.confirm ? "CONFIRMED" : "PENDING_HOLD", source: options.actorId ? "ADMIN" : "WEB", createdById: options.actorId,
         confirmedAt: options.confirm ? new Date() : null, crmSync: options.confirm ? "QUEUED" : "NOT_CONNECTED",
         customerName: input.customer?.name ?? "— (hold placed, details pending)",
         customerPhone: input.customer?.phone ?? "", customerEmail: input.customer?.email ?? "",
-        customerCountry: input.customer?.country ?? "India", notes: input.customer?.notes, addons: addOns.length ? JSON.stringify(addOns) : undefined,
+        customerCountry: input.customer?.country ?? "India", notes: input.customer?.notes, addons: addOns.length ? addOns : undefined,
         baseAmount: amounts.base, weekendUplift: amounts.weekendUplift, taxAmount: amounts.tax,
         depositAmount: amounts.deposit, totalPayable: amounts.totalPayable, holdExpiresAt: expires,
       } });

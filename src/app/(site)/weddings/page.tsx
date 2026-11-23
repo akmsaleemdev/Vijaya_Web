@@ -1,3 +1,5 @@
+
+import { getComponentCopy } from "@/lib/cms/read";
 import { pageCopy, pageMetadata, siteContent } from "@/lib/content";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -6,7 +8,7 @@ import { PageHero } from "@/components/layout/page-hero";
 import { Reveal, MaskReveal } from "@/components/motion/reveal";
 import { Media } from "@/components/media/media";
 import { VenueCard } from "@/components/booking/venue-card";
-import { SPACES } from "@/lib/data/spaces";
+import { getPublicVenue } from "@/lib/venue-content";
 import { SHOW_VIRTUAL_TOUR } from "@/lib/site-config";
 
 const metadata: Metadata = {
@@ -18,9 +20,10 @@ const metadata: Metadata = {
 const WEDDING_SPACES = ["periyar", "nila", "kabani", "lake-area", "hospitality", "outdoor-areas"];
 
 export default async function WeddingsPage() {
+  const cmsCopy = await getComponentCopy("copy.app.site.weddings.page");
   const showVirtualTour = (await siteContent("site.settings"))?.showVirtualTour ?? SHOW_VIRTUAL_TOUR;
   const copy = await pageCopy("weddings");
-  const spaces = WEDDING_SPACES.map((s) => SPACES.find((x) => x.slug === s)!).filter(Boolean);
+  const spaces = (await Promise.all(WEDDING_SPACES.map(getPublicVenue))).filter((space) => space !== null);
 
   return (
     <main>
@@ -29,7 +32,7 @@ export default async function WeddingsPage() {
         title={copy("title.where-kerala-s-finest-weddings-come-home", "Where Kerala's Finest Weddings Come Home.")}
         intro={copy("intro.scale-ritual-and-beauty-in-one-destination-grand-h", "Scale, ritual and beauty in one destination — grand halls, lakeside vows and a team that treats your wedding like the once-in-a-lifetime occasion it is.")}
         image={copy("image.weddings-page-section-hero-image-2-weddings-page-v", "/media/Weddings Page Section-_Hero Image 2-Weddings Page-Vijaya-VICC.webp")}
-        imageAlt="Wedding ceremony setup on the lawns of VIJAYA International Convention Centre with floral mandap and fountain"
+        imageAlt={cmsCopy("imageAlt.wedding-ceremony-setup-on-the-lawns-of-vijaya", "Wedding ceremony setup on the lawns of VIJAYA International Convention Centre with floral mandap and fountain")}
         overlayClassName="bg-gradient-to-r from-ink/85 via-ink/45 to-transparent"
         tag={false}
         ctas={[

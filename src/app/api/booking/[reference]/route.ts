@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { publicAmounts } from "@/lib/booking/amounts";
 import { bookingMode } from "@/lib/payments/settings";
 import { db } from "@/lib/db";
 
@@ -28,17 +29,10 @@ export async function GET(_req: Request, { params }: { params: Promise<{ referen
     status: b.status,
     crmSync: b.crmSync,
     holdExpiresAt: b.holdExpiresAt,
-    amounts: {
-      base: b.baseAmount,
-      weekendUplift: b.weekendUplift,
-      tax: b.taxAmount,
-      deposit: b.depositAmount,
-      totalPayable: b.totalPayable,
-      totalContract: b.baseAmount + b.weekendUplift + b.taxAmount,
-    },
+    amounts: publicAmounts(b),
     payments: b.payments.map((p) => ({
       providerRef: p.providerRef,
-      amount: p.amount,
+      amount: Number(p.amount),
       status: p.status,
       method: p.method,
       transactionId: p.transactionId,

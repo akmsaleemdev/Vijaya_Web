@@ -1,4 +1,6 @@
 "use client";
+import { useCmsCopy } from "@/lib/cms/client";
+
 
 /**
  * Checkout flow — steps 7–9 of the booking journey.
@@ -38,6 +40,7 @@ interface BookingInfo {
 const EASE = [0.22, 1, 0.36, 1] as const;
 
 export function CheckoutFlow({ reference }: { reference: string }) {
+  const cmsCopy = useCmsCopy("copy.components.checkout.checkout-flow");
   const router = useRouter();
 
   const [info, setInfo] = useState<BookingInfo | null>(null);
@@ -159,7 +162,7 @@ export function CheckoutFlow({ reference }: { reference: string }) {
         <div className="card-editorial p-10 text-center">
           <AlertTriangle className="h-8 w-8 text-gold mx-auto" aria-hidden />
           <p className="mt-4 text-[15px]">{loadError}</p>
-          <Link href="/check-your-date" className="btn-primary mt-6"><span>Back to Check Your Date</span></Link>
+          <Link href="/check-your-date" className="btn-primary mt-6"><span>{cmsCopy("text.back-to-check-your-date", "Back to Check Your Date")}</span></Link>
         </div>
       </div>
     );
@@ -168,7 +171,7 @@ export function CheckoutFlow({ reference }: { reference: string }) {
   if (!info) {
     return (
       <div className="container-editorial max-w-4xl">
-        <div className="card-editorial p-14 text-center text-stone text-sm">Loading your booking…</div>
+        <div className="card-editorial p-14 text-center text-stone text-sm">{cmsCopy("text.loading-your-booking", "Loading your booking…")}</div>
       </div>
     );
   }
@@ -183,14 +186,11 @@ export function CheckoutFlow({ reference }: { reference: string }) {
       {phase === "expired" && (
         <div className="card-editorial p-10 text-center max-w-xl mx-auto">
           <TimerReset className="h-9 w-9 text-gold mx-auto" aria-hidden />
-          <h2 className="mt-5 text-xl font-normal">Your temporary hold has expired</h2>
-          <p className="mt-3 text-[14px] font-light leading-7 text-stone">
-            The selected slot was released back to the calendar — that's how we keep availability honest for everyone.
-            You can start again; nearby dates may still be open.
-          </p>
+          <h2 className="mt-5 text-xl font-normal">{cmsCopy("text.your-temporary-hold-has-expired", "Your temporary hold has expired")}</h2>
+          <p className="mt-3 text-[14px] font-light leading-7 text-stone">{cmsCopy("text.the-selected-slot-was-released-back-to-the-ca", "The selected slot was released back to the calendar — that's how we keep availability honest for everyone. You can start again; nearby dates may still be open.")}</p>
           <div className="mt-7 flex flex-wrap justify-center gap-4">
-            <Link href="/check-your-date" className="btn-primary"><span>Start Again</span></Link>
-            <a href={SITE.contact.phoneHref} className="btn-outline"><Phone className="h-4 w-4" /><span>Contact the Team</span></a>
+            <Link href="/check-your-date" className="btn-primary"><span>{cmsCopy("text.start-again", "Start Again")}</span></Link>
+            <a href={SITE.contact.phoneHref} className="btn-outline"><Phone className="h-4 w-4" /><span>{cmsCopy("text.contact-the-team", "Contact the Team")}</span></a>
           </div>
         </div>
       )}
@@ -198,9 +198,9 @@ export function CheckoutFlow({ reference }: { reference: string }) {
       {/* ------------------------------------------------------------- GONE */}
       {phase === "gone" && (
         <div className="card-editorial p-10 text-center max-w-xl mx-auto">
-          <h2 className="text-xl font-normal">Booking not found</h2>
-          <p className="mt-3 text-[14px] font-light text-stone">The reference {reference} doesn't match a booking.</p>
-          <Link href="/check-your-date" className="btn-primary mt-7"><span>Check Your Date</span></Link>
+          <h2 className="text-xl font-normal">{cmsCopy("text.booking-not-found", "Booking not found")}</h2>
+          <p className="mt-3 text-[14px] font-light text-stone">{cmsCopy("text.the-reference", "The reference ")}{reference}{cmsCopy("text.doesn-t-match-a-booking", " doesn't match a booking.")}</p>
+          <Link href="/check-your-date" className="btn-primary mt-7"><span>{cmsCopy("text.check-your-date", "Check Your Date")}</span></Link>
         </div>
       )}
 
@@ -218,34 +218,32 @@ export function CheckoutFlow({ reference }: { reference: string }) {
               {phase === "details" ? (
                 <form onSubmit={submitDetails} noValidate className="card-editorial p-6 md:p-8">
                   <div className="flex items-center justify-between gap-4">
-                    <h2 className="h-sub">Your Details</h2>
+                    <h2 className="h-sub">{cmsCopy("text.your-details", "Your Details")}</h2>
                     {info.holdExpiresAt && remaining > 0 && (
                       <span className="inline-flex items-center gap-2 chip !text-burgundy !border-burgundy/30">
-                        <Clock className="h-3.5 w-3.5" /> Held {mins}:{String(secs).padStart(2, "0")}
+                        <Clock className="h-3.5 w-3.5" />{cmsCopy("text.held", " Held ")}{mins}:{String(secs).padStart(2, "0")}
                       </span>
                     )}
                   </div>
-                  <p className="mt-2 text-[12px] text-stone">
-                    Your venue is temporarily held while you submit your details.
-                  </p>
+                  <p className="mt-2 text-[12px] text-stone">{cmsCopy("text.your-venue-is-temporarily-held-while-you-subm", "Your venue is temporarily held while you submit your details.")}</p>
                   <div className="mt-7 grid gap-5 sm:grid-cols-2">
                     <div>
-                      <label className="label-vij" htmlFor="co-name">Full Name *</label>
+                      <label className="label-vij" htmlFor="co-name">{cmsCopy("text.full-name", "Full Name *")}</label>
                       <input id="co-name" className="input-vij" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} autoComplete="name" aria-invalid={!!errors.name} />
                       {errors.name && <p role="alert" className="mt-1.5 text-[12px] text-destructive">{errors.name}</p>}
                     </div>
                     <div>
-                      <label className="label-vij" htmlFor="co-phone">Mobile *</label>
-                      <input id="co-phone" className="input-vij" value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} autoComplete="tel" placeholder="+91 …" aria-invalid={!!errors.phone} />
+                      <label className="label-vij" htmlFor="co-phone">{cmsCopy("text.mobile", "Mobile *")}</label>
+                      <input id="co-phone" className="input-vij" value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} autoComplete="tel" placeholder={cmsCopy("placeholder.91", "+91 …")} aria-invalid={!!errors.phone} />
                       {errors.phone && <p role="alert" className="mt-1.5 text-[12px] text-destructive">{errors.phone}</p>}
                     </div>
                     <div>
-                      <label className="label-vij" htmlFor="co-email">Email *</label>
+                      <label className="label-vij" htmlFor="co-email">{cmsCopy("text.email", "Email *")}</label>
                       <input id="co-email" type="email" className="input-vij" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} autoComplete="email" aria-invalid={!!errors.email} />
                       {errors.email && <p role="alert" className="mt-1.5 text-[12px] text-destructive">{errors.email}</p>}
                     </div>
                     <div>
-                      <label className="label-vij" htmlFor="co-country">Country</label>
+                      <label className="label-vij" htmlFor="co-country">{cmsCopy("text.country", "Country")}</label>
                       <select id="co-country" className="input-vij" value={f.country} onChange={(e) => setF({ ...f, country: e.target.value })}>
                         {["India", "United Arab Emirates", "Qatar", "Oman", "Saudi Arabia", "Kuwait", "Bahrain", "United Kingdom", "United States", "Singapore", "Other"].map((c) => (
                           <option key={c}>{c}</option>
@@ -253,20 +251,17 @@ export function CheckoutFlow({ reference }: { reference: string }) {
                       </select>
                     </div>
                     <div className="sm:col-span-2">
-                      <label className="label-vij" htmlFor="co-notes">Event Notes</label>
-                      <textarea id="co-notes" rows={3} className="input-vij !min-h-[100px] py-3 resize-y" value={f.notes} onChange={(e) => setF({ ...f, notes: e.target.value })} placeholder="Anything the events team should know — traditions, vendors, timings." />
+                      <label className="label-vij" htmlFor="co-notes">{cmsCopy("text.event-notes", "Event Notes")}</label>
+                      <textarea id="co-notes" rows={3} className="input-vij !min-h-[100px] py-3 resize-y" value={f.notes} onChange={(e) => setF({ ...f, notes: e.target.value })} placeholder={cmsCopy("placeholder.anything-the-events-team-should-know-traditio", "Anything the events team should know — traditions, vendors, timings.")} />
                     </div>
                   </div>
 
                   <label className="mt-6 flex items-start gap-3 cursor-pointer">
                     <input type="checkbox" checked={f.acceptTerms} onChange={(e) => setF({ ...f, acceptTerms: e.target.checked })} className="mt-1 h-4 w-4 accent-[#421D24]" aria-invalid={!!errors.acceptTerms} />
-                    <span className="text-[12px] leading-6 text-stone">
-                      I accept the{" "}
-                      <Link href="/terms" target="_blank" className="link-underline text-burgundy">Terms</Link>,{" "}
-                      <Link href="/booking-policy" target="_blank" className="link-underline text-burgundy">Booking Policy</Link>{" "}
-                      and{" "}
-                      <Link href="/cancellation-policy" target="_blank" className="link-underline text-burgundy">Cancellation Policy</Link>
-                      , and the <Link href="/privacy" target="_blank" className="link-underline text-burgundy">privacy notice</Link>. *
+                    <span className="text-[12px] leading-6 text-stone">{cmsCopy("text.i-accept-the", "I accept the")}{" "}
+                      <Link href="/terms" target="_blank" className="link-underline text-burgundy">{cmsCopy("text.terms", "Terms")}</Link>,{" "}
+                      <Link href="/booking-policy" target="_blank" className="link-underline text-burgundy">{cmsCopy("text.booking-policy", "Booking Policy")}</Link>{" "}{cmsCopy("text.and", "and")}{" "}
+                      <Link href="/cancellation-policy" target="_blank" className="link-underline text-burgundy">{cmsCopy("text.cancellation-policy", "Cancellation Policy")}</Link>{cmsCopy("text.and-the", ", and the ")}<Link href="/privacy" target="_blank" className="link-underline text-burgundy">{cmsCopy("text.privacy-notice", "privacy notice")}</Link>. *
                     </span>
                   </label>
                   {errors.acceptTerms && <p role="alert" className="mt-1.5 text-[12px] text-destructive">{errors.acceptTerms}</p>}
@@ -285,27 +280,23 @@ export function CheckoutFlow({ reference }: { reference: string }) {
                 </form>
               ) : (
                 <div className="card-editorial p-6 md:p-8">
-                  <h2 className="h-sub">Payment</h2>
+                  <h2 className="h-sub">{cmsCopy("text.payment", "Payment")}</h2>
                   <p className="mt-2 text-[13px] font-light leading-7 text-stone">
-                    {info.spaceName} · {prettyDate(info.eventDate)} · {slotLabel}. Your hold remains active while you
-                    pay. Confirmation is issued only after server-side payment verification.
-                  </p>
-                  {info.holdExpiresAt && remaining > 0 && <p className="mt-3 text-sm">Hold expires in {mins}:{String(secs).padStart(2, "0")}</p>}
+                    {info.spaceName} · {prettyDate(info.eventDate)} · {slotLabel}{cmsCopy("text.your-hold-remains-active-while-you-pay-confir", ". Your hold remains active while you pay. Confirmation is issued only after server-side payment verification.")}</p>
+                  {info.holdExpiresAt && remaining > 0 && <p className="mt-3 text-sm">{cmsCopy("text.hold-expires-in", "Hold expires in ")}{mins}:{String(secs).padStart(2, "0")}</p>}
                   <div className="mt-6 flex items-start gap-3 border border-gold/40 bg-gold/10 p-4 text-[12px] leading-6 text-stone">
                     <ShieldCheck className="h-4 w-4 mt-0.5 shrink-0 text-gold" />
-                    <span>
-                      The production payment gateway is being finalised with VICC. This checkout runs in{" "}
-                      <strong className="font-medium">sandbox demonstration mode</strong> — no real charge is made.
-                    </span>
+                    <span>{cmsCopy("text.the-production-payment-gateway-is-being-final", "The production payment gateway is being finalised with VICC. This checkout runs in")}{" "}
+                      <strong className="font-medium">{cmsCopy("text.sandbox-demonstration-mode", "sandbox demonstration mode")}</strong>{cmsCopy("text.no-real-charge-is-made", " — no real charge is made.")}</span>
                   </div>
                   <button onClick={startPayment} disabled={payInitiating} className="btn-primary mt-7 w-full disabled:opacity-60">
                     {payInitiating ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}
-                    <span>Pay {inr(info.amounts.totalPayable)} Securely</span>
+                    <span>{cmsCopy("text.pay", "Pay ")}{inr(info.amounts.totalPayable)}{cmsCopy("text.securely", " Securely")}</span>
                   </button>
                   <div className="mt-6 flex items-center gap-4 text-[12px] text-stone">
-                    <span className="inline-flex items-center gap-1.5"><Lock className="h-3.5 w-3.5" /> Encrypted</span>
-                    <span className="inline-flex items-center gap-1.5"><ShieldCheck className="h-3.5 w-3.5" /> Verified server-side</span>
-                    <span className="inline-flex items-center gap-1.5"><Clock className="h-3.5 w-3.5" /> Hold protected</span>
+                    <span className="inline-flex items-center gap-1.5"><Lock className="h-3.5 w-3.5" />{cmsCopy("text.encrypted", " Encrypted")}</span>
+                    <span className="inline-flex items-center gap-1.5"><ShieldCheck className="h-3.5 w-3.5" />{cmsCopy("text.verified-server-side", " Verified server-side")}</span>
+                    <span className="inline-flex items-center gap-1.5"><Clock className="h-3.5 w-3.5" />{cmsCopy("text.hold-protected", " Hold protected")}</span>
                   </div>
                 </div>
               )}
@@ -314,23 +305,23 @@ export function CheckoutFlow({ reference }: { reference: string }) {
 
           {/* SUMMARY */}
           <aside className="card-editorial p-6 lg:sticky lg:top-28">
-            <h2 className="text-[13px] font-medium uppercase tracking-[0.18em]">Booking Summary</h2>
+            <h2 className="text-[13px] font-medium uppercase tracking-[0.18em]">{cmsCopy("text.booking-summary", "Booking Summary")}</h2>
             <dl className="mt-5 space-y-3 text-[13px]">
-              <Row label="Reference" value={info.reference} mono />
-              <Row label="Venue" value={info.spaceName} />
-              <Row label="Event Type" value={titleCase(info.eventType)} />
-              <Row label="Date" value={prettyDate(info.eventDate)} />
-              <Row label="Slot" value={`${slotLabel} — ${SLOTS.find((s) => s.id === info.slot)?.time || ""}`} />
-              <Row label="Guests" value={String(info.guests)} />
+              <Row label={cmsCopy("label.reference", "Reference")} value={info.reference} mono />
+              <Row label={cmsCopy("label.venue", "Venue")} value={info.spaceName} />
+              <Row label={cmsCopy("label.event-type", "Event Type")} value={titleCase(info.eventType)} />
+              <Row label={cmsCopy("label.date", "Date")} value={prettyDate(info.eventDate)} />
+              <Row label={cmsCopy("label.slot", "Slot")} value={`${slotLabel} — ${SLOTS.find((s) => s.id === info.slot)?.time || ""}`} />
+              <Row label={cmsCopy("label.guests", "Guests")} value={String(info.guests)} />
             </dl>
             <div className="hairline-t mt-5 pt-5">
               <dl className="space-y-2.5 text-[13px]">
-                <Row label="Base rent (sample)" value={inr(info.amounts.base)} />
-                {info.amounts.weekendUplift > 0 && <Row label="Weekend uplift" value={inr(info.amounts.weekendUplift)} />}
-                <Row label="Estimated taxes" value={inr(info.amounts.tax)} />
+                <Row label={cmsCopy("label.base-rent-sample", "Base rent (sample)")} value={inr(info.amounts.base)} />
+                {info.amounts.weekendUplift > 0 && <Row label={cmsCopy("label.weekend-uplift", "Weekend uplift")} value={inr(info.amounts.weekendUplift)} />}
+                <Row label={cmsCopy("label.estimated-taxes", "Estimated taxes")} value={inr(info.amounts.tax)} />
                 {info.bookingMode === "SANDBOX"
-                  ? <Row label="Sandbox deposit" value={inr(info.amounts.totalPayable)} strong />
-                  : <Row label="Estimated total" value={inr(info.amounts.totalContract)} strong />}
+                  ? <Row label={cmsCopy("label.sandbox-deposit", "Sandbox deposit")} value={inr(info.amounts.totalPayable)} strong />
+                  : <Row label={cmsCopy("label.estimated-total", "Estimated total")} value={inr(info.amounts.totalContract)} strong />}
               </dl>
               <p className="mt-4 text-[11px] leading-5 text-stone/80">
                 {info.bookingMode === "OFFLINE" ? "No online payment is due. VIJAYA will confirm pricing and arrangements." : "Sandbox prices are for demonstration."}
@@ -343,11 +334,11 @@ export function CheckoutFlow({ reference }: { reference: string }) {
       {phase === "requested" && (
         <section className="card-editorial p-8 md:p-10 max-w-xl mx-auto text-center">
           <CheckCircle2 className="h-10 w-10 mx-auto text-gold" aria-hidden />
-          <h2 className="h-sub mt-4">Booking request received</h2>
-          <p className="mt-3 text-stone">The VIJAYA team will review your request for {info.spaceName} on {prettyDate(info.eventDate)}.</p>
-          <p className="mt-4 font-medium">Booking reference {info.reference}</p>
-          <p className="mt-2 text-sm text-stone">No online payment is due.</p>
-          <Link className="btn-primary mt-6" href="/my-vijaya">Track in My VIJAYA</Link>
+          <h2 className="h-sub mt-4">{cmsCopy("text.booking-request-received", "Booking request received")}</h2>
+          <p className="mt-3 text-stone">{cmsCopy("text.the-vijaya-team-will-review-your-request-for", "The VIJAYA team will review your request for ")}{info.spaceName}{cmsCopy("text.on", " on ")}{prettyDate(info.eventDate)}.</p>
+          <p className="mt-4 font-medium">{cmsCopy("text.booking-reference", "Booking reference ")}{info.reference}</p>
+          <p className="mt-2 text-sm text-stone">{cmsCopy("text.no-online-payment-is-due", "No online payment is due.")}</p>
+          <Link className="btn-primary mt-6" href="/my-vijaya">{cmsCopy("text.track-in-my-vijaya", "Track in My VIJAYA")}</Link>
         </section>
       )}
 
@@ -357,30 +348,26 @@ export function CheckoutFlow({ reference }: { reference: string }) {
           <div className="card-editorial overflow-hidden">
             <div className="bg-burgundy text-ivory p-8 md:p-10 text-center">
               <CheckCircle2 className="h-12 w-12 text-gold mx-auto" aria-hidden />
-              <h2 className="mt-4 text-2xl font-light">Your occasion is confirmed.</h2>
+              <h2 className="mt-4 text-2xl font-light">{cmsCopy("text.your-occasion-is-confirmed", "Your occasion is confirmed.")}</h2>
               <p className="mt-2 text-[14px] font-light text-ivory/70">
-                {info.customerFirstName ? `${info.customerFirstName}, your` : "Your"} booking reference
-              </p>
+                {info.customerFirstName ? `${info.customerFirstName}, your` : "Your"}{cmsCopy("text.booking-reference-2", " booking reference")}</p>
               <p className="mt-3 text-3xl font-light tracking-[0.08em] text-gold">{info.reference}</p>
             </div>
             <div className="p-8 md:p-10">
               <dl className="grid gap-4 sm:grid-cols-2 text-[13px]">
-                <Row label="Venue" value={info.spaceName} />
-                <Row label="Date" value={prettyDate(info.eventDate)} />
-                <Row label="Slot" value={slotLabel} />
-                <Row label="Guests" value={String(info.guests)} />
-                <Row label="Payment status" value={info.payments.some((p) => p.status === "SUCCESS") ? "Payment recorded" : "Arranged with VIJAYA"} />
-                <Row label="CRM sync" value={info.crmSync === "QUEUED" ? "Queued — will sync when CRM connects" : info.crmSync} />
+                <Row label={cmsCopy("label.venue-2", "Venue")} value={info.spaceName} />
+                <Row label={cmsCopy("label.date-2", "Date")} value={prettyDate(info.eventDate)} />
+                <Row label={cmsCopy("label.slot-2", "Slot")} value={slotLabel} />
+                <Row label={cmsCopy("label.guests-2", "Guests")} value={String(info.guests)} />
+                <Row label={cmsCopy("label.payment-status", "Payment status")} value={info.payments.some((p) => p.status === "SUCCESS") ? "Payment recorded" : "Arranged with VIJAYA"} />
+                <Row label={cmsCopy("label.crm-sync", "CRM sync")} value={info.crmSync === "QUEUED" ? "Queued — will sync when CRM connects" : info.crmSync} />
               </dl>
               <div className="hairline-t mt-8 pt-6 flex flex-wrap gap-4">
-                <Link href="/my-vijaya" className="btn-primary"><span>Access My VIJAYA</span></Link>
-                <button onClick={() => window.print()} className="btn-outline"><Printer className="h-4 w-4" /><span>Print Booking</span></button>
-                <Link href="/contact" className="btn-outline"><span>Contact VIJAYA</span></Link>
+                <Link href="/my-vijaya" className="btn-primary"><span>{cmsCopy("text.access-my-vijaya", "Access My VIJAYA")}</span></Link>
+                <button onClick={() => window.print()} className="btn-outline"><Printer className="h-4 w-4" /><span>{cmsCopy("text.print-booking", "Print Booking")}</span></button>
+                <Link href="/contact" className="btn-outline"><span>{cmsCopy("text.contact-vijaya", "Contact VIJAYA")}</span></Link>
               </div>
-              <p className="mt-6 text-[12px] leading-6 text-stone">
-                A confirmation email follows once notifications are configured. To sign in to My VIJAYA, use this
-                booking reference and the email you provided at checkout.
-              </p>
+              <p className="mt-6 text-[12px] leading-6 text-stone">{cmsCopy("text.a-confirmation-email-follows-once-notificatio", "A confirmation email follows once notifications are configured. To sign in to My VIJAYA, use this booking reference and the email you provided at checkout.")}</p>
             </div>
           </div>
         </motion.div>

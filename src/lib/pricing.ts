@@ -39,6 +39,6 @@ export function quoteFor(spaceSlug: string, dateISO: string, slot: string, raw?:
   return { base, weekendUplift, tax, deposit, totalPayable, balanceDue, totalContract };
 }
 
-export function inr(n: number): string {
-  return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n);
+export function inr(n: number | { toNumber(): number }): string {
+  return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(typeof n === "number" ? n : n.toNumber());
 }

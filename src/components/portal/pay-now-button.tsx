@@ -1,4 +1,6 @@
 "use client";
+import { useCmsCopy } from "@/lib/cms/client";
+
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -6,6 +8,7 @@ import { Loader2, Wallet, CheckCircle2 } from "lucide-react";
 import { track } from "@/lib/analytics";
 
 export function PayNowButton({ amount, label }: { amount: number; label: string }) {
+  const cmsCopy = useCmsCopy("copy.components.portal.pay-now-button");
   const router = useRouter();
   const [state, setState] = useState<"idle" | "paying" | "done" | "error">("idle");
   const [message, setMessage] = useState<string | null>(null);
@@ -40,8 +43,7 @@ export function PayNowButton({ amount, label }: { amount: number; label: string 
   if (state === "done") {
     return (
       <p role="status" className="mt-6 inline-flex items-center gap-2 text-[13px] text-available">
-        <CheckCircle2 className="h-4 w-4" /> Payment received — receipt added to your documents.
-      </p>
+        <CheckCircle2 className="h-4 w-4" />{cmsCopy("text.payment-received-receipt-added-to-your-docume", " Payment received — receipt added to your documents.")}</p>
     );
   }
 
@@ -52,7 +54,7 @@ export function PayNowButton({ amount, label }: { amount: number; label: string 
         <span>{state === "paying" ? "Processing" : label}</span>
       </button>
       {message && <p role="alert" className="mt-3 text-[12px] text-destructive">{message}</p>}
-      <p className="mt-3 text-[11px] text-stone/80">Sandbox mode — no real charge is made.</p>
+      <p className="mt-3 text-[11px] text-stone/80">{cmsCopy("text.sandbox-mode-no-real-charge-is-made", "Sandbox mode — no real charge is made.")}</p>
     </div>
   );
 }

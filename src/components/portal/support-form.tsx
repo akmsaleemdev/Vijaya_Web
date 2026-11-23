@@ -1,10 +1,13 @@
 "use client";
+import { useCmsCopy } from "@/lib/cms/client";
+
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Send, CheckCircle2 } from "lucide-react";
 
 export function SupportForm() {
+  const cmsCopy = useCmsCopy("copy.components.portal.support-form");
   const router = useRouter();
   const [subject, setSubject] = useState("Booking question");
   const [message, setMessage] = useState("");
@@ -44,34 +47,30 @@ export function SupportForm() {
     return (
       <div className="card-editorial p-10 text-center self-start">
         <CheckCircle2 className="h-9 w-9 text-available mx-auto" aria-hidden />
-        <h2 className="mt-4 text-lg font-normal">Request received</h2>
-        <p className="mt-2 text-[13px] font-light leading-6 text-stone">
-          Your support request is logged. The events desk responds within one working day.
-        </p>
-        <button onClick={() => setState("idle")} className="link-underline mt-4 text-[12px] uppercase tracking-[0.16em] text-burgundy">
-          Raise another request
-        </button>
+        <h2 className="mt-4 text-lg font-normal">{cmsCopy("text.request-received", "Request received")}</h2>
+        <p className="mt-2 text-[13px] font-light leading-6 text-stone">{cmsCopy("text.your-support-request-is-logged-the-events-des", "Your support request is logged. The events desk responds within one working day.")}</p>
+        <button onClick={() => setState("idle")} className="link-underline mt-4 text-[12px] uppercase tracking-[0.16em] text-burgundy">{cmsCopy("text.raise-another-request", "Raise another request")}</button>
       </div>
     );
   }
 
   return (
     <form onSubmit={submit} noValidate className="card-editorial p-6 md:p-8 self-start">
-      <h2 className="text-[13px] font-medium uppercase tracking-[0.16em]">Support Request</h2>
+      <h2 className="text-[13px] font-medium uppercase tracking-[0.16em]">{cmsCopy("text.support-request", "Support Request")}</h2>
       <div className="mt-5 space-y-5">
         <div>
-          <label className="label-vij" htmlFor="sf-subject">Subject</label>
+          <label className="label-vij" htmlFor="sf-subject">{cmsCopy("text.subject", "Subject")}</label>
           <select id="sf-subject" className="input-vij" value={subject} onChange={(e) => setSubject(e.target.value)}>
-            <option>Booking question</option>
-            <option>Payment & receipts</option>
-            <option>Vendors & setup</option>
-            <option>Change of plans</option>
-            <option>Something else</option>
+            <option>{cmsCopy("text.booking-question", "Booking question")}</option>
+            <option>{cmsCopy("text.payment-receipts", "Payment & receipts")}</option>
+            <option>{cmsCopy("text.vendors-setup", "Vendors & setup")}</option>
+            <option>{cmsCopy("text.change-of-plans", "Change of plans")}</option>
+            <option>{cmsCopy("text.something-else", "Something else")}</option>
           </select>
         </div>
         <div>
-          <label className="label-vij" htmlFor="sf-message">Message *</label>
-          <textarea id="sf-message" rows={5} className="input-vij !min-h-[140px] py-3 resize-y" value={message} onChange={(e) => setMessage(e.target.value)} placeholder="How can the events desk help?" aria-invalid={!!error} />
+          <label className="label-vij" htmlFor="sf-message">{cmsCopy("text.message", "Message *")}</label>
+          <textarea id="sf-message" rows={5} className="input-vij !min-h-[140px] py-3 resize-y" value={message} onChange={(e) => setMessage(e.target.value)} placeholder={cmsCopy("placeholder.how-can-the-events-desk-help", "How can the events desk help?")} aria-invalid={!!error} />
           {error && <p role="alert" className="mt-1.5 text-[12px] text-destructive">{error}</p>}
         </div>
       </div>

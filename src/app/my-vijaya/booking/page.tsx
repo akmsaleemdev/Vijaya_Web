@@ -1,12 +1,17 @@
+import { totalContract } from "@/lib/booking/amounts";
+import { pageMetadata } from "@/lib/content";
+
+import { getComponentCopy } from "@/lib/cms/read";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getPortalSession, getPortalBookings } from "@/lib/portal-auth";
 import { inr } from "@/lib/pricing";
 import { SLOTS } from "@/lib/site-config";
 
-export const metadata: Metadata = { title: "Portal — Booking" };
+const metadata: Metadata = { title: "Portal — Booking" };
 
 export default async function PortalBookingPage() {
+  const cmsCopy = await getComponentCopy("copy.app.my-vijaya.booking.page");
   const session = await getPortalSession();
   if (!session) redirect("/my-vijaya");
   const bookings = await getPortalBookings(session.email);
@@ -14,11 +19,11 @@ export default async function PortalBookingPage() {
   return (
     <main className="py-12 md:py-16">
       <div className="container-editorial">
-        <p className="eyebrow-dark">Booking</p>
-        <h1 className="h-section mt-3">Your Reservation{bookings.length > 1 ? "s" : ""}</h1>
+        <p className="eyebrow-dark">{cmsCopy("text.booking", "Booking")}</p>
+        <h1 className="h-section mt-3">{cmsCopy("text.your-reservation", "Your Reservation")}{bookings.length > 1 ? "s" : ""}</h1>
 
         {bookings.length === 0 ? (
-          <p className="lede mt-6">No active bookings were found on your account.</p>
+          <p className="lede mt-6">{cmsCopy("text.no-active-bookings-were-found-on-your-account", "No active bookings were found on your account.")}</p>
         ) : (
           <div className="mt-10 space-y-6">
             {bookings.map((b) => {
@@ -36,28 +41,28 @@ export default async function PortalBookingPage() {
                   </div>
                   <dl className="mt-6 grid gap-4 sm:grid-cols-3 text-[13px]">
                     <div>
-                      <dt className="label-vij !mb-1">Event Type</dt>
+                      <dt className="label-vij !mb-1">{cmsCopy("text.event-type", "Event Type")}</dt>
                       <dd className="font-light">{b.eventType.charAt(0) + b.eventType.slice(1).toLowerCase()}</dd>
                     </div>
                     <div>
-                      <dt className="label-vij !mb-1">Date</dt>
+                      <dt className="label-vij !mb-1">{cmsCopy("text.date", "Date")}</dt>
                       <dd className="font-light">{new Date(b.eventDate + "T00:00:00Z").toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" })}</dd>
                     </div>
                     <div>
-                      <dt className="label-vij !mb-1">Slot</dt>
+                      <dt className="label-vij !mb-1">{cmsCopy("text.slot", "Slot")}</dt>
                       <dd className="font-light">{slot ? `${slot.label} — ${slot.time}` : b.slot}</dd>
                     </div>
                     <div>
-                      <dt className="label-vij !mb-1">Guest Estimate</dt>
-                      <dd className="font-light">{b.guests} guests</dd>
+                      <dt className="label-vij !mb-1">{cmsCopy("text.guest-estimate", "Guest Estimate")}</dt>
+                      <dd className="font-light">{b.guests}{cmsCopy("text.guests", " guests")}</dd>
                     </div>
                     <div>
-                      <dt className="label-vij !mb-1">Total Contract (sample)</dt>
-                      <dd className="font-light">{inr(b.baseAmount + b.weekendUplift + b.taxAmount)}</dd>
+                      <dt className="label-vij !mb-1">{cmsCopy("text.total-contract-sample", "Total Contract (sample)")}</dt>
+                      <dd className="font-light">{inr(totalContract(b))}</dd>
                     </div>
                     <div>
-                      <dt className="label-vij !mb-1">Add-ons</dt>
-                      <dd className="font-light text-stone">Arranged with your event manager</dd>
+                      <dt className="label-vij !mb-1">{cmsCopy("text.add-ons", "Add-ons")}</dt>
+                      <dd className="font-light text-stone">{cmsCopy("text.arranged-with-your-event-manager", "Arranged with your event manager")}</dd>
                     </div>
                   </dl>
                   {b.notes && (
@@ -72,3 +77,5 @@ export default async function PortalBookingPage() {
     </main>
   );
 }
+
+export const generateMetadata = () => pageMetadata("my-vijaya.booking", metadata);

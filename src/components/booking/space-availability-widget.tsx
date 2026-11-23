@@ -1,4 +1,6 @@
 "use client";
+import { useCmsCopy } from "@/lib/cms/client";
+
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -8,6 +10,7 @@ import { track } from "@/lib/analytics";
 
 /** Compact per-space availability check on the space detail page. */
 export function SpaceAvailabilityWidget({ slug }: { slug: string }) {
+  const cmsCopy = useCmsCopy("copy.components.booking.space-availability-widget");
   const router = useRouter();
   const [date, setDate] = useState("");
   const [slot, setSlot] = useState<SlotId>("EVENING");
@@ -51,11 +54,11 @@ export function SpaceAvailabilityWidget({ slug }: { slug: string }) {
     <div className="card-editorial p-6">
       <div className="grid gap-4 sm:grid-cols-3">
         <div>
-          <label htmlFor={`sa-date-${slug}`} className="label-vij">Date</label>
+          <label htmlFor={`sa-date-${slug}`} className="label-vij">{cmsCopy("text.date", "Date")}</label>
           <input id={`sa-date-${slug}`} type="date" min={new Date().toISOString().slice(0, 10)} value={date} onChange={(e) => setDate(e.target.value)} className="input-vij !min-h-[44px]" />
         </div>
         <div>
-          <label htmlFor={`sa-slot-${slug}`} className="label-vij">Slot</label>
+          <label htmlFor={`sa-slot-${slug}`} className="label-vij">{cmsCopy("text.slot", "Slot")}</label>
           <select id={`sa-slot-${slug}`} value={slot} onChange={(e) => setSlot(e.target.value as SlotId)} className="input-vij !min-h-[44px]">
             {SLOTS.map((s) => (
               <option key={s.id} value={s.id}>{s.label}</option>
@@ -63,7 +66,7 @@ export function SpaceAvailabilityWidget({ slug }: { slug: string }) {
           </select>
         </div>
         <div>
-          <label htmlFor={`sa-guests-${slug}`} className="label-vij">Guests</label>
+          <label htmlFor={`sa-guests-${slug}`} className="label-vij">{cmsCopy("text.guests", "Guests")}</label>
           <input id={`sa-guests-${slug}`} type="number" min={10} value={guests} onChange={(e) => setGuests(e.target.value)} className="input-vij !min-h-[44px]" />
         </div>
       </div>
@@ -89,9 +92,7 @@ export function SpaceAvailabilityWidget({ slug }: { slug: string }) {
                   router.push(`/check-your-date?venue=${slug}&date=${date}&slot=${slot}&guests=${guests}&auto=1`);
                 }}
                 className="mt-2 link-underline font-medium text-burgundy"
-              >
-                Continue to booking →
-              </button>
+              >{cmsCopy("text.continue-to-booking", "Continue to booking →")}</button>
             )}
           </div>
         </div>

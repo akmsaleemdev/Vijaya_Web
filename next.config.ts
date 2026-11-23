@@ -1,8 +1,11 @@
 import type { NextConfig } from "next";
 
+const storageHost = process.env.SUPABASE_URL ? new URL(process.env.SUPABASE_URL).hostname : null;
+
 const nextConfig: NextConfig = {
   output: process.env.VERCEL === "1" ? undefined : "standalone",
   images: {
+    remotePatterns: storageHost ? [{ protocol: "https", hostname: storageHost, pathname: "/storage/v1/object/public/**" }] : [],
     // Serve modern formats first: AVIF (~50% smaller than JPEG) where the
     // browser supports it, WebP as the universal fallback.
     formats: ["image/avif", "image/webp"],

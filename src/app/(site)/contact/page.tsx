@@ -1,3 +1,5 @@
+
+import { getComponentCopy } from "@/lib/cms/read";
 import { pageCopy, pageMetadata, siteContent } from "@/lib/content";
 import type { Metadata } from "next";
 import { MapPin, Phone, Mail, Clock } from "lucide-react";
@@ -13,6 +15,7 @@ const metadata: Metadata = {
 };
 
 export default async function ContactPage() {
+  const cmsCopy = await getComponentCopy("copy.app.site.contact.page");
   const [copy, contact] = await Promise.all([pageCopy("contact"), siteContent("site.contact")]);
   const phone = contact?.phone ?? SITE.contact.phone;
   const email = contact?.email ?? SITE.contact.email;
@@ -52,7 +55,7 @@ export default async function ContactPage() {
                     <span key={l} className="block">{l}</span>
                   ))}
                 </p>
-                {contact?.map && <a className="link-underline" href={contact.map}>View map</a>}
+                {contact?.map && <a className="link-underline" href={contact.map}>{cmsCopy("text.view-map", "View map")}</a>}
               </div>
               <div className="hairline-t pt-6">
                 <h2 className="flex items-center gap-2.5 text-[13px] font-medium uppercase tracking-[0.18em]">

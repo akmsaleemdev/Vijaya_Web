@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { checkAvailability } from "@/lib/availability";
 import { inr } from "@/lib/pricing";
 import { SPACES, SPACE_BY_SLUG } from "@/lib/data/spaces";
+import { siteContent } from "@/lib/content";
 import { SLOTS, type SlotId, SHOW_VIRTUAL_TOUR } from "@/lib/site-config";
 
 export const dynamic = "force-dynamic";
@@ -27,6 +28,7 @@ function findSpace(text: string) {
 
 export async function POST(req: Request) {
   try {
+    const showVirtualTour = (await siteContent("site.settings"))?.showVirtualTour ?? SHOW_VIRTUAL_TOUR;
     const { message } = await req.json();
     const text: string = String(message || "").slice(0, 500);
     const t = text.toLowerCase();
@@ -84,12 +86,12 @@ export async function POST(req: Request) {
       reply = "Celebrations of every scale — private dinners on the lake deck, family stays in our hospitality rooms, community events on the lawns. What's the occasion and roughly how many guests?";
       action = { label: "Explore celebrations", href: "/celebrations" };
     } else if (t.includes("visit") || t.includes("tour") || t.includes("see the venue")) {
-      reply = SHOW_VIRTUAL_TOUR
+      reply = showVirtualTour
         ? "A private venue visit is the best way to feel the destination. You can also walk it in 360° right now, from anywhere."
         : "A private venue visit is the best way to feel the destination. Book a walk-through with the VIJAYA events team.";
-      suggestions = SHOW_VIRTUAL_TOUR ? ["Book a venue visit", "Open 360° tour"] : ["Book a venue visit"];
+      suggestions = showVirtualTour ? ["Book a venue visit", "Open 360° tour"] : ["Book a venue visit"];
       action = { label: "Request a visit", href: "/venue-visit" };
-    } else if (SHOW_VIRTUAL_TOUR && (t.includes("360") || t.includes("virtual"))) {
+    } else if (showVirtualTour && (t.includes("360") || t.includes("virtual"))) {
       reply = "The 360° experience lets you drag, zoom and jump between the grand hall, lobby and lake deck — on desktop and mobile.";
       action = { label: "Enter 360° Experience", href: "/360-tour" };
     } else if (t.includes("nri") || t.includes("gcc") || t.includes("dubai") || t.includes("abroad") || t.includes("qatar") || t.includes("saudi")) {

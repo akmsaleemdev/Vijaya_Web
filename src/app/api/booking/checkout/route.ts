@@ -20,9 +20,9 @@ export async function POST(req: Request) {
     const booking = await tx.booking.findUnique({ where: { reference } });
     if (!booking || booking.source !== "WEB") return null;
     if (["PENDING_APPROVAL", "PENDING_PAYMENT", "CONFIRMED"].includes(booking.status) && booking.customerEmail === email) {
-      return { reference, status: booking.status, totalPayable: booking.totalPayable };
+      return { reference, status: booking.status, totalPayable: Number(booking.totalPayable) };
     }
-    if (booking.status !== "HOLD" || !booking.holdExpiresAt || booking.holdExpiresAt <= new Date()) return null;
+    if (booking.status !== "PENDING_HOLD" || !booking.holdExpiresAt || booking.holdExpiresAt <= new Date()) return null;
     const space = await tx.space.findUnique({ where: { id: booking.spaceId }, select: { requiresApproval: true } });
     const sandbox = !space?.requiresApproval && await bookingMode(tx) === "SANDBOX";
     const status = sandbox ? "PENDING_PAYMENT" : "PENDING_APPROVAL";
@@ -39,7 +39,7 @@ export async function POST(req: Request) {
       select: { reference: true, status: true, totalPayable: true },
     });
   });
-  return updated ? Response.json(updated) : Response.json({ code: "HOLD_EXPIRED", error: "Your temporary hold is no longer available." }, { status: 409 });
+  return updated ? Response.json({ ...updated, totalPayable: Number(updated.totalPayable) }) : Response.json({ code: "HOLD_EXPIRED", error: "Your temporary hold is no longer available." }, { status: 409 });
 }
 
 export async function DELETE(req: Request) {

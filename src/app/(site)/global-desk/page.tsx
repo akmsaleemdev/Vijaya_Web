@@ -26,7 +26,7 @@ const FEATURES = [
   { icon: Users, title: "Remote Family Consultation", copy: "Everyone joins, wherever they are." },
   { icon: CreditCard, title: "Online Payment", copy: "Secure payments with clear receipts." },
   { icon: Handshake, title: "Vendor Coordination", copy: "Florists, photographers and caterers — aligned with the venue." },
-].filter((f) => SHOW_VIRTUAL_TOUR || f.title !== "360° Venue Tour");
+];
 
 export default async function GlobalDeskPage() {
   const showVirtualTour = (await siteContent("site.settings"))?.showVirtualTour ?? SHOW_VIRTUAL_TOUR;
@@ -62,7 +62,7 @@ export default async function GlobalDeskPage() {
           </div>
 
           <div className="mt-16 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {FEATURES.map((f, i) => (
+            {FEATURES.filter((item) => showVirtualTour || item.title !== "360° Venue Tour").map((f, i) => (
               <Reveal key={f.title} delay={i * 0.05}>
                 <div className="card-editorial p-7 h-full">
                   <f.icon className="h-5 w-5 text-gold" aria-hidden />

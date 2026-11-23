@@ -1,4 +1,6 @@
 "use client";
+import { useCmsCopy } from "@/lib/cms/client";
+
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -14,6 +16,7 @@ const LINKS = [
 ];
 
 export function PortalNav() {
+  const cmsCopy = useCmsCopy("copy.components.portal.portal-nav");
   const pathname = usePathname();
   const router = useRouter();
 
@@ -24,7 +27,7 @@ export function PortalNav() {
   };
 
   return (
-    <nav aria-label="Portal" className="bg-ivory hairline-b sticky top-0 z-30">
+    <nav aria-label={cmsCopy("aria-label.portal", "Portal")} className="bg-ivory hairline-b sticky top-0 z-30">
       <div className="container-editorial flex items-center justify-between gap-4 overflow-x-auto">
         <ul className="flex gap-1">
           {LINKS.map((l) => {
@@ -45,8 +48,7 @@ export function PortalNav() {
           })}
         </ul>
         <button onClick={logout} className="hidden sm:inline-flex items-center gap-2 text-[12px] uppercase tracking-[0.14em] text-stone hover:text-burgundy transition-colors py-4">
-          <LogOut className="h-3.5 w-3.5" /> Sign out
-        </button>
+          <LogOut className="h-3.5 w-3.5" />{cmsCopy("text.sign-out", " Sign out")}</button>
       </div>
     </nav>
   );

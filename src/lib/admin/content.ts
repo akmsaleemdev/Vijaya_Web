@@ -1,21 +1,16 @@
+import { Prisma } from "@prisma/client";
 import { draftMode } from "next/headers";
-import { revalidateTag } from "next/cache";
 import { db } from "@/lib/db";
-import { CONTENT_TAG } from "@/lib/content";
+import { invalidateContent } from "@/lib/cms/revalidate";
 import { bookingTransaction } from "@/lib/booking/transaction";
-import pageDefaults from "./page-defaults.json";
-import { GALLERY, FAQS } from "@/lib/data/content";
-import { FOOTER_NAV, MAIN_NAV } from "@/lib/site-config";
+import { contentCatalog } from "@/lib/cms/catalog";
 import { contentInput, schemaFor } from "./content-schema";
 import { audit, failure, success, type Identity } from "./http";
 
 export async function content(req: Request, actor: Identity) {
   if (req.method === "GET") {
     if (new URL(req.url).searchParams.get("defaults") === "true") {
-      return success({ ...pageDefaults, "site.navigation": MAIN_NAV, "site.footer": FOOTER_NAV,
-        "site.faq": FAQS.map(({ q, a, group }) => ({ q, a, category: group })),
-        "gallery.items": GALLERY.map(({ src, caption, category }) => ({ src, caption, category, alt: caption })),
-      });
+      return success(contentCatalog);
     }
     return success(await db.contentEntry.findMany({ orderBy: [{ key: "asc" }, { locale: "asc" }], include: { versions: { orderBy: { createdAt: "desc" }, take: 25 } } }));
   }
@@ -31,7 +26,7 @@ export async function content(req: Request, actor: Identity) {
     if (action === "DELETE" || action === "UNPUBLISH") {
       if (!current) return failure(404, "NOT_FOUND", "Content entry not found.");
       if (action === "DELETE") await tx.contentEntry.delete({ where });
-      else await tx.contentEntry.update({ where, data: { published: null, editedBy: actor.admin.id } });
+      else await tx.contentEntry.update({ where, data: { published: Prisma.DbNull, editedBy: actor.admin.id } });
       await audit(tx, actor, action, "ContentEntry", current.id, current);
       return success({ key, locale });
     }
@@ -39,9 +34,9 @@ export async function content(req: Request, actor: Identity) {
       ? await tx.contentVersion.findFirst({ where: { id: version, entryId: current.id } })
       : null;
     if (action === "RESTORE" && !historical) return failure(404, "NOT_FOUND", "Content version not found.");
-    const checked = schema.safeParse(historical ? JSON.parse(historical.payload) : payload);
+    const checked = schema.safeParse(historical ? historical.payload : payload);
     if (!checked.success) return failure(422, "INVALID_CONTENT", "Validate the content fields.", checked.error.issues);
-    const draft = JSON.stringify(checked.data);
+    const draft = checked.data as Prisma.InputJsonValue;
     const published = action === "PUBLISH" ? draft : undefined;
     const update = { draft, published, editedBy: actor.admin.id };
     const next = await tx.contentEntry.upsert({ where, update, create: { key, locale, ...update } });
@@ -49,7 +44,7 @@ export async function content(req: Request, actor: Identity) {
     await audit(tx, actor, action, "ContentEntry", next.id, current, next);
     return success(next);
   });
-  if (result.ok) revalidateTag(CONTENT_TAG, { expire: 0 });
+  if (result.ok && !["DRAFT", "RESTORE"].includes(action)) invalidateContent(key);
   return result;
 }
 

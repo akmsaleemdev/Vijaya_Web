@@ -31,10 +31,11 @@ model Space {
   pricingJson        String?
   slotStates         SlotState[]
   bookings           Booking[]
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  createdAt          DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt          DateTime @updatedAt @db.Timestamptz(3)
 }
 
+/// PostgreSQL overlap guards live in 202611230004_native_live_cms/migration.sql.
 /// One row per space/date/slot that is NOT available. Absence of a row = AVAILABLE.
 /// Unique constraint on (spaceId,date,slot) gives atomic double-booking protection.
 model SlotState {
@@ -42,16 +43,16 @@ model SlotState {
   spaceId       String
   date          String // YYYY-MM-DD
   slot          String // MORNING | AFTERNOON | EVENING | FULL_DAY
-  status        String // TEMPORARY_HOLD | PENDING_APPROVAL | PENDING_PAYMENT | CONFIRMED | BLOCKED | MAINTENANCE | INTERNAL_USE
+  status        SlotStatus
   source        String    @default("ONLINE") // ONLINE | OFFLINE_CRM | OPS
-  holdExpiresAt DateTime?
+  holdExpiresAt DateTime? @db.Timestamptz(3)
   bookingRef    String?
   startMinute   Int?
   endMinute     Int?
   groupId       String?
   note          String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  createdAt     DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime  @updatedAt @db.Timestamptz(3)
   space         Space     @relation(fields: [spaceId], references: [id])
 
   @@unique([spaceId, date, slot])
@@ -70,7 +71,7 @@ model Booking {
   eventDate      String // YYYY-MM-DD
   slot           String
   guests         Int
-  status         String // HOLD | PENDING_APPROVAL | PENDING_PAYMENT | CONFIRMED | CANCELLED | EXPIRED
+  status         BookingStatus
   crmSync        String    @default("NOT_CONNECTED") // NOT_CONNECTED | SYNCED | QUEUED | FAILED
   customerName   String
   customerPhone  String
@@ -79,21 +80,21 @@ model Booking {
   createdById    String?
   requestKey     String? @unique
   requestHash    String?
-  startAt        DateTime?
-  endAt          DateTime?
+  startAt        DateTime? @db.Timestamptz(3)
+  endAt          DateTime? @db.Timestamptz(3)
   customerCountry String   @default("India")
   notes          String?
-  baseAmount     Int
-  weekendUplift  Int       @default(0)
-  taxAmount      Int       @default(0)
-  depositAmount  Int       @default(0)
-  totalPayable   Int
-  addons         String? // JSON array
-  holdExpiresAt  DateTime?
-  confirmedAt    DateTime?
-  cancelledAt    DateTime?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  baseAmount     Decimal @db.Decimal(14, 2)
+  weekendUplift  Decimal       @default(0) @db.Decimal(14, 2)
+  taxAmount      Decimal       @default(0) @db.Decimal(14, 2)
+  depositAmount  Decimal       @default(0) @db.Decimal(14, 2)
+  totalPayable   Decimal @db.Decimal(14, 2)
+  addons         Json?
+  holdExpiresAt  DateTime? @db.Timestamptz(3)
+  confirmedAt    DateTime? @db.Timestamptz(3)
+  cancelledAt    DateTime? @db.Timestamptz(3)
+  createdAt      DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime  @updatedAt @db.Timestamptz(3)
   space          Space     @relation(fields: [spaceId], references: [id])
   payments       Payment[]
   documents      Document[]
@@ -110,14 +111,14 @@ model Payment {
   provider       String   @default("SANDBOX") // SANDBOX until gateway is confirmed
   providerRef    String   @unique
   idempotencyKey String   @unique
-  amount         Int
-  status         String // INITIATED | PENDING | SUCCESS | FAILED | REFUNDED
+  amount         Decimal @db.Decimal(14, 2)
+  status         PaymentStatus
   method         String?
   transactionId  String?
   failureReason  String?
-  paidAt         DateTime?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  paidAt         DateTime? @db.Timestamptz(3)
+  createdAt      DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime @updatedAt @db.Timestamptz(3)
   booking        Booking  @relation(fields: [bookingId], references: [id])
 
   @@index([bookingId])
@@ -143,9 +144,9 @@ model Lead {
   message       String?
   source        String   @default("website")
   internalNotes String?
-  followUpAt    DateTime?
+  followUpAt    DateTime? @db.Timestamptz(3)
   utmJson       String? // JSON string — utm_source etc.
-  createdAt     DateTime @default(now())
+  createdAt     DateTime @default(now()) @db.Timestamptz(3)
 
   @@index([type])
 }
@@ -156,7 +157,7 @@ model Document {
   bookingId String
   type      String // CONFIRMATION | INVOICE | RECEIPT | AGREEMENT | UPLOAD
   title     String
-  createdAt DateTime @default(now())
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
   booking   Booking  @relation(fields: [bookingId], references: [id])
 }
 
@@ -169,7 +170,7 @@ model Milestone {
   dueDate   String?
   status    String    @default("UPCOMING") // UPCOMING | DONE
   order     Int       @default(0)
-  createdAt DateTime  @default(now())
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
   booking   Booking   @relation(fields: [bookingId], references: [id])
 }
 
@@ -182,7 +183,7 @@ model SupportTicket {
   subject   String
   message   String
   status    String   @default("OPEN")
-  createdAt DateTime @default(now())
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
 }
 
 /// Analytics events (fire-and-forget beacon).
@@ -192,7 +193,7 @@ model AnalyticsEvent {
   path      String?
   sessionId String?
   metaJson  String?
-  createdAt DateTime @default(now())
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
 
   @@index([name])
 }
@@ -208,7 +209,7 @@ model AuditLog {
   beforeJson String?
   afterJson  String?
   detailJson String?
-  createdAt DateTime @default(now())
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
 }
 
 model AdminUser {
@@ -220,24 +221,24 @@ model AdminUser {
   disabled           Boolean  @default(false)
   mustChangePassword Boolean  @default(true)
   sessionVersion     Int      @default(0)
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  createdAt          DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt          DateTime @updatedAt @db.Timestamptz(3)
 }
 
 model LoginAttempt {
   key         String   @id
   failures    Int      @default(0)
-  resetAt     DateTime
+  resetAt     DateTime @db.Timestamptz(3)
 }
 
 model ContentEntry {
   id           String   @id @default(cuid())
   key          String
   locale       String
-  draft        String
-  published    String?
+  draft        Json
+  published    Json?
   editedBy     String
-  updatedAt    DateTime @updatedAt
+  updatedAt    DateTime @updatedAt @db.Timestamptz(3)
   versions     ContentVersion[]
   @@unique([key, locale])
 }
@@ -245,14 +246,16 @@ model ContentEntry {
 model ContentVersion {
   id         String   @id @default(cuid())
   entryId    String
-  payload    String
+  payload    Json
   actorId    String
-  createdAt  DateTime @default(now())
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
   entry      ContentEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
   @@index([entryId, createdAt])
 }
 
 model MediaAsset {
+  storageBucket String?
+  version String?
   id        String   @id @default(cuid())
   filename  String
   mime      String
@@ -260,7 +263,7 @@ model MediaAsset {
   alt       String
   folder    String
   tags      String
-  createdAt DateTime @default(now())
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
 }
 
 model CustomerNote {
@@ -268,7 +271,7 @@ model CustomerNote {
   email     String
   note      String
   actorId   String
-  createdAt DateTime @default(now())
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
   @@index([email])
 }
 
@@ -277,7 +280,7 @@ model BookingNote {
   bookingRef String
   note       String
   actorId    String
-  createdAt  DateTime @default(now())
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
   @@index([bookingRef])
 }
 
@@ -286,7 +289,7 @@ model EmailLog {
   bookingRef  String
   template    String
   status      String
-  createdAt   DateTime @default(now())
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
 }
 
 model SessionConfig {
@@ -303,8 +306,8 @@ model SessionConfig {
 model AdminSession {
   id         String   @id
   adminId    String
-  lastSeenAt DateTime
-  expiresAt  DateTime
+  lastSeenAt DateTime @db.Timestamptz(3)
+  expiresAt  DateTime @db.Timestamptz(3)
   @@index([adminId])
 }
 
@@ -312,12 +315,44 @@ model PaymentSettings {
   id           String   @id
   mode         String   @default("OFFLINE")
   provider     String   @default("SIMULATOR")
-  updatedAt    DateTime @updatedAt
+  updatedAt    DateTime @updatedAt @db.Timestamptz(3)
 }
 
 model GatewayCredential {
   provider       String   @id
   keyId          String
   encrypted      String
-  updatedAt      DateTime @updatedAt
+  updatedAt      DateTime @updatedAt @db.Timestamptz(3)
+}
+
+
+enum BookingStatus {
+  PENDING_HOLD
+  PENDING_APPROVAL
+  PENDING_PAYMENT
+  CONFIRMED
+  CANCELLED
+  REJECTED
+  EXPIRED
+  COMPLETED
+  NO_SHOW
+}
+
+enum SlotStatus {
+  TEMPORARY_HOLD
+  PENDING_APPROVAL
+  PENDING_PAYMENT
+  CONFIRMED
+  BLOCKED
+  MAINTENANCE
+  INTERNAL_USE
+  CANCELLED
+}
+
+enum PaymentStatus {
+  INITIATED
+  PENDING
+  SUCCESS
+  FAILED
+  REFUNDED
 }

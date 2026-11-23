@@ -1,4 +1,6 @@
 "use client";
+import { useCmsCopy } from "@/lib/cms/client";
+
 
 /**
  * Sandbox payment gateway — simulates a real gateway's hosted checkout.
@@ -23,14 +25,16 @@ const METHODS = [
 ];
 
 export default function SandboxGatewayPage() {
+  const cmsCopy = useCmsCopy("copy.components.checkout.sandbox-gateway");
   return (
-    <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-stone text-sm">Loading gateway…</div>}>
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-stone text-sm">{cmsCopy("text.loading-gateway", "Loading gateway…")}</div>}>
       <SandboxGateway />
     </Suspense>
   );
 }
 
 function SandboxGateway() {
+  const cmsCopy = useCmsCopy("copy.components.checkout.sandbox-gateway");
   const params = useSearchParams();
   const router = useRouter();
   const reference = params.get("ref") || "";
@@ -98,8 +102,8 @@ function SandboxGateway() {
     <main className="min-h-screen bg-ink text-ivory flex items-center justify-center p-6">
       <motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }} className="w-full max-w-md">
         <div className="text-center mb-8">
-          <p className="text-[10px] uppercase tracking-[0.3em] text-gold">VIJAYA Secure Pay</p>
-          <h1 className="mt-3 text-2xl font-light">Sandbox Gateway</h1>
+          <p className="text-[10px] uppercase tracking-[0.3em] text-gold">{cmsCopy("text.vijaya-secure-pay", "VIJAYA Secure Pay")}</p>
+          <h1 className="mt-3 text-2xl font-light">{cmsCopy("text.sandbox-gateway", "Sandbox Gateway")}</h1>
           <p className="mt-2 text-[12px] text-ivory/50">
             {reference ? `Booking ${reference}` : "Missing booking reference"} · {providerRef || "—"}
           </p>
@@ -109,7 +113,7 @@ function SandboxGateway() {
         <div className="bg-ivory text-ink rounded-sm p-7">
           {outcome === "idle" && (
             <>
-              <p className="label-vij">Payment method</p>
+              <p className="label-vij">{cmsCopy("text.payment-method", "Payment method")}</p>
               <div className="grid gap-3">
                 {METHODS.map((m) => (
                   <button
@@ -130,9 +134,9 @@ function SandboxGateway() {
                 ))}
               </div>
               <div className="mt-6 space-y-2">
-                <button onClick={() => pay("SUCCESS")} className="btn-primary w-full"><span>Pay Now</span></button>
-                <button onClick={() => pay("PENDING")} className="btn-outline w-full !text-[11px]"><span>Simulate pending</span></button>
-                <button onClick={() => pay("FAILED")} className="btn-outline w-full !text-[11px]"><span>Simulate failure</span></button>
+                <button onClick={() => pay("SUCCESS")} className="btn-primary w-full"><span>{cmsCopy("text.pay-now", "Pay Now")}</span></button>
+                <button onClick={() => pay("PENDING")} className="btn-outline w-full !text-[11px]"><span>{cmsCopy("text.simulate-pending", "Simulate pending")}</span></button>
+                <button onClick={() => pay("FAILED")} className="btn-outline w-full !text-[11px]"><span>{cmsCopy("text.simulate-failure", "Simulate failure")}</span></button>
               </div>
             </>
           )}
@@ -140,33 +144,28 @@ function SandboxGateway() {
           {outcome === "processing" && (
             <div className="py-10 text-center">
               <Loader2 className="h-8 w-8 animate-spin text-gold mx-auto" aria-hidden />
-              <p className="mt-4 text-sm">Processing your payment…</p>
-              <p className="mt-1 text-[12px] text-stone">Do not close this window.</p>
+              <p className="mt-4 text-sm">{cmsCopy("text.processing-your-payment", "Processing your payment…")}</p>
+              <p className="mt-1 text-[12px] text-stone">{cmsCopy("text.do-not-close-this-window", "Do not close this window.")}</p>
             </div>
           )}
 
           {outcome === "pending" && (
             <div className="py-10 text-center" role="status">
               <Loader2 className="h-8 w-8 animate-spin text-gold mx-auto" aria-hidden />
-              <p className="mt-4 text-sm font-medium">Payment pending</p>
-              <p className="mt-2 text-[13px] font-light leading-6 text-stone max-w-xs mx-auto">
-                Your bank is taking longer than usual to respond. We're checking with the gateway — this usually
-                resolves within a minute. Your hold stays protected.
-              </p>
-              <Link href={`/book/${reference}`} className="link-underline mt-4 inline-block text-[12px] uppercase tracking-[0.16em] text-burgundy">
-                Continue to status page
-              </Link>
+              <p className="mt-4 text-sm font-medium">{cmsCopy("text.payment-pending", "Payment pending")}</p>
+              <p className="mt-2 text-[13px] font-light leading-6 text-stone max-w-xs mx-auto">{cmsCopy("text.your-bank-is-taking-longer-than-usual-to-resp", "Your bank is taking longer than usual to respond. We're checking with the gateway — this usually resolves within a minute. Your hold stays protected.")}</p>
+              <Link href={`/book/${reference}`} className="link-underline mt-4 inline-block text-[12px] uppercase tracking-[0.16em] text-burgundy">{cmsCopy("text.continue-to-status-page", "Continue to status page")}</Link>
             </div>
           )}
 
           {outcome === "failed" && (
             <div className="py-8 text-center" role="alert">
               <AlertTriangle className="h-8 w-8 text-destructive mx-auto" aria-hidden />
-              <p className="mt-4 text-sm font-medium">Payment failed</p>
+              <p className="mt-4 text-sm font-medium">{cmsCopy("text.payment-failed", "Payment failed")}</p>
               <p className="mt-2 text-[13px] font-light leading-6 text-stone">{reason}</p>
               <div className="mt-6 flex flex-col gap-3">
-                <button onClick={() => setOutcome("idle")} className="btn-primary w-full"><span>Try Another Method</span></button>
-                <Link href={`/book/${reference}`} className="btn-outline w-full"><span>Back to Booking</span></Link>
+                <button onClick={() => setOutcome("idle")} className="btn-primary w-full"><span>{cmsCopy("text.try-another-method", "Try Another Method")}</span></button>
+                <Link href={`/book/${reference}`} className="btn-outline w-full"><span>{cmsCopy("text.back-to-booking", "Back to Booking")}</span></Link>
               </div>
             </div>
           )}
@@ -174,15 +173,14 @@ function SandboxGateway() {
           {outcome === "success" && (
             <div className="py-10 text-center" role="status">
               <CheckCircle2 className="h-10 w-10 text-available mx-auto" aria-hidden />
-              <p className="mt-4 text-sm font-medium">Payment successful</p>
-              <p className="mt-2 text-[13px] text-stone">Confirming your booking…</p>
+              <p className="mt-4 text-sm font-medium">{cmsCopy("text.payment-successful", "Payment successful")}</p>
+              <p className="mt-2 text-[13px] text-stone">{cmsCopy("text.confirming-your-booking", "Confirming your booking…")}</p>
             </div>
           )}
         </div>
 
         <p className="mt-6 text-center text-[11px] text-ivory/40 flex items-center justify-center gap-2">
-          <ShieldCheck className="h-3.5 w-3.5" /> Server-verified · idempotent callbacks · sandbox mode
-        </p>
+          <ShieldCheck className="h-3.5 w-3.5" />{cmsCopy("text.server-verified-idempotent-callbacks-sandbox", " Server-verified · idempotent callbacks · sandbox mode")}</p>
       </motion.div>
     </main>
   );

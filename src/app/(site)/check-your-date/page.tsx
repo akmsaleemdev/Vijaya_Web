@@ -1,4 +1,6 @@
-import { pageCopy, pageMetadata } from "@/lib/content";
+
+import { getComponentCopy } from "@/lib/cms/read";
+import { pageCopy, pageMetadata, siteContent } from "@/lib/content";
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { CheckYourDateWizard } from "@/components/booking/check-date-wizard";
@@ -10,7 +12,7 @@ const metadata: Metadata = {
 };
 
 export default async function CheckYourDatePage() {
-  const copy = await pageCopy("check-your-date");
+  const [copy, settings] = await Promise.all([pageCopy("check-your-date"), siteContent("site.settings")]);
   return (
     <main className="min-h-screen">
       <section className="bg-burgundy text-ivory pt-28 md:pt-36 pb-10">
@@ -22,17 +24,18 @@ export default async function CheckYourDatePage() {
       </section>
       <section className="py-12 md:py-16 bg-ivory">
         <Suspense fallback={<WizardSkeleton />}>
-          <CheckYourDateWizard />
+          <CheckYourDateWizard showVirtualTour={settings?.showVirtualTour} />
         </Suspense>
       </section>
     </main>
   );
 }
 
-function WizardSkeleton() {
+async function WizardSkeleton() {
+  const cmsCopy = await getComponentCopy("copy.app.site.check-your-date.page");
   return (
     <div className="container-editorial max-w-4xl">
-      <div className="card-editorial p-10 text-center text-stone text-sm">Preparing the booking engine…</div>
+      <div className="card-editorial p-10 text-center text-stone text-sm">{cmsCopy("text.preparing-the-booking-engine", "Preparing the booking engine…")}</div>
     </div>
   );
 }

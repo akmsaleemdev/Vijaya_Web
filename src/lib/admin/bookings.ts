@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import type { Prisma } from "@prisma/client";
+import { BookingStatus, type Prisma } from "@prisma/client";
+import { sumMoney, totalContract, type Money } from "@/lib/booking/amounts";
 import { db } from "@/lib/db";
 import { confirmIn, createTemporaryHold } from "@/lib/availability";
 import { dates, holdInput, indiaDate } from "@/lib/booking/slots";
@@ -10,7 +11,7 @@ import { spreadsheet } from "./spreadsheet";
 import { audit, failure, success, type Identity } from "./http";
 
 const filter = z.object({
-  q: z.string().max(120).optional(), status: z.string().max(40).optional(), venue: z.string().max(100).optional(),
+  q: z.string().max(120).optional(), status: z.enum(BookingStatus).optional(), venue: z.string().max(100).optional(),
   from: dates.optional(), to: dates.optional(), source: z.enum(["ADMIN", "WEB"]).optional(),
   payment: z.enum(["PAID", "OUTSTANDING"]).optional(),
   page: z.coerce.number().int().min(1).max(10000).default(1),
@@ -18,10 +19,9 @@ const filter = z.object({
   order: z.enum(["asc", "desc"]).default("desc"),
   export: z.enum(["csv", "xlsx"]).optional(),
 });
-export const paid = (payments: { status: string; amount: number }[]) =>
-  payments.reduce((total, payment) => total + (payment.status === "SUCCESS" ? payment.amount : 0), 0);
-export const contract = (row: { baseAmount: number; taxAmount: number; weekendUplift: number }) =>
-  row.baseAmount + row.taxAmount + row.weekendUplift;
+export const paid = (payments: { status: string; amount: Money }[]) =>
+  sumMoney(payments.filter((payment) => payment.status === "SUCCESS").map(({ amount }) => amount));
+export const contract = totalContract;
 
 function csvField(value: unknown) {
   const text = String(value ?? "");
@@ -36,7 +36,9 @@ export async function bookings(req: Request, actor: Identity, reference?: string
       db.auditLog.findMany({ where: { entity: "Booking", entityRef: reference }, orderBy: { createdAt: "desc" } }),
       db.bookingNote.findMany({ where: { bookingRef: reference }, orderBy: { createdAt: "desc" } }),
     ]);
-    return success({ ...booking, history, notesLog: notes, balance: contract(booking) - paid(booking.payments) });
+    return success({ ...booking, baseAmount: Number(booking.baseAmount), weekendUplift: Number(booking.weekendUplift), taxAmount: Number(booking.taxAmount),
+      totalPayable: Number(booking.totalPayable), addons: booking.addons ? JSON.stringify(booking.addons) : null,
+      payments: booking.payments.map((item) => ({ ...item, amount: Number(item.amount) })), history, notesLog: notes, balance: contract(booking) - paid(booking.payments) });
   }
   const parsed = filter.safeParse(Object.fromEntries(new URL(req.url).searchParams));
   if (!parsed.success) return failure(422, "INVALID_FILTER", "Check your booking filters.");
@@ -114,14 +116,14 @@ export async function updateBooking(req: Request, actor: Identity, reference: st
           break;
         }
         case "RESCHEDULE": {
-          if (![...pendingStatuses, "CONFIRMED"].includes(booking.status)) return conflict();
+          if (booking.status !== "PENDING_HOLD" && booking.status !== "PENDING_APPROVAL" && booking.status !== "PENDING_PAYMENT" && booking.status !== "CONFIRMED") return conflict();
           const space = await tx.space.findUnique({ where: { id: action.venue } });
           const range = space?.active && await slotRange(tx, action.venue, action.slot);
           if (!space || !range || action.date < indiaDate() || (space.capacityMin ?? 0) > booking.guests || (space.capacityMax ?? Infinity) < booking.guests) {
             return failure(422, "INVALID_SESSION", "Choose an active venue and session that can accommodate this booking.");
           }
           await tx.slotState.deleteMany({ where: { bookingRef: reference, source: { in: ["ONLINE", "OPS"] } } });
-          const status = booking.status === "HOLD" ? "TEMPORARY_HOLD" : booking.status;
+          const status = booking.status === "PENDING_HOLD" ? "TEMPORARY_HOLD" : booking.status;
           const times = await reserve(tx, { spaceSlug: space.id, date: action.date, slot: action.slot, range, status, source: "OPS", bookingRef: reference, holdExpiresAt: booking.holdExpiresAt ?? undefined });
           await tx.booking.update({ where: { reference }, data: { ...times, spaceId: space.id, spaceName: space.name, eventDate: action.date, slot: action.slot } });
           const milestones = await tx.milestone.findMany({ where: { bookingId: booking.id } });
@@ -140,7 +142,7 @@ export async function updateBooking(req: Request, actor: Identity, reference: st
           if (!["CONFIRMED", "COMPLETED", "PENDING_PAYMENT"].includes(booking.status)) return conflict();
           const idempotencyKey = `offline:${booking.id}:${action.key}`;
           const existing = await tx.payment.findUnique({ where: { idempotencyKey } });
-          if (existing) return existing.amount === action.amount && existing.method === action.method ? success({ reference }) : failure(409, "IDEMPOTENCY_CONFLICT", "Use a new request key for a different payment.");
+          if (existing) return existing.amount.equals(action.amount) && existing.method === action.method ? success({ reference }) : failure(409, "IDEMPOTENCY_CONFLICT", "Use a new request key for a different payment.");
           if (action.amount > contract(booking) - paid(booking.payments)) return failure(422, "INVALID_AMOUNT", "The payment exceeds the balance.");
           const payment = await tx.payment.create({ data: { bookingId: booking.id, amount: action.amount, method: action.method, status: "SUCCESS", provider: "OFFLINE", providerRef: randomUUID(), idempotencyKey, paidAt: new Date() } });
           await tx.document.create({ data: { bookingId: booking.id, type: "RECEIPT", title: `Payment Receipt — ${payment.providerRef}` } });

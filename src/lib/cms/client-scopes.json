@@ -1,0 +1,22 @@
+[
+  "copy.components.booking.check-date-wizard",
+  "copy.components.booking.faq-accordion",
+  "copy.components.booking.quick-date-form",
+  "copy.components.booking.space-availability-widget",
+  "copy.components.booking.spaces-listing",
+  "copy.components.booking.sticky-space-cta",
+  "copy.components.checkout.checkout-flow",
+  "copy.components.checkout.sandbox-gateway",
+  "copy.components.concierge.concierge-widget",
+  "copy.components.forms.enquiry-form",
+  "copy.components.forms.global-desk-form",
+  "copy.components.gallery.gallery-grid",
+  "copy.components.layout.site-header",
+  "copy.components.portal.pay-now-button",
+  "copy.components.portal.portal-login",
+  "copy.components.portal.portal-nav",
+  "copy.components.portal.support-form",
+  "copy.components.spaces.space-gallery",
+  "copy.components.media.media",
+  "copy.components.booking.venue-card"
+]

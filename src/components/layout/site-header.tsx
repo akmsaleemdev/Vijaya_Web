@@ -1,4 +1,6 @@
 "use client";
+import { useCmsCopy } from "@/lib/cms/client";
+
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -26,6 +28,7 @@ const DARK_HERO_ROUTES = [
 export function SiteHeader({ navigation = MAIN_NAV, showVirtualTour = SHOW_VIRTUAL_TOUR }: {
   navigation?: typeof MAIN_NAV; showVirtualTour?: boolean;
 } = {}) {
+  const cmsCopy = useCmsCopy("copy.components.layout.site-header");
   const pathname = usePathname();
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -68,7 +71,7 @@ export function SiteHeader({ navigation = MAIN_NAV, showVirtualTour = SHOW_VIRTU
         <div className="container-editorial flex items-center justify-between h-16 md:h-20">
           <Logo variant={logoVariant} href="/" size="header" priority />
 
-          <nav aria-label="Primary" className="hidden lg:flex items-center gap-7">
+          <nav aria-label={cmsCopy("aria-label.primary", "Primary")} className="hidden lg:flex items-center gap-7">
             {navigation.map((item) => (
               <Link
                 key={item.href}
@@ -83,7 +86,7 @@ export function SiteHeader({ navigation = MAIN_NAV, showVirtualTour = SHOW_VIRTU
 
           <div className="flex items-center gap-3">
             <Link href="/check-your-date" onClick={() => track("hero_check_date_click", { source: "header" })} className="hidden md:inline-flex btn-primary !min-h-[42px] !px-5 text-[11px]">
-              <span>Check Your Date</span>
+              <span>{cmsCopy("text.check-your-date", "Check Your Date")}</span>
             </Link>
             <button
               onClick={() => setMenuOpen((v) => !v)}
@@ -107,9 +110,9 @@ export function SiteHeader({ navigation = MAIN_NAV, showVirtualTour = SHOW_VIRTU
             className="fixed inset-0 z-40 bg-burgundy text-ivory flex flex-col pt-24 pb-8"
             role="dialog"
             aria-modal="true"
-            aria-label="Site menu"
+            aria-label={cmsCopy("aria-label.site-menu", "Site menu")}
           >
-            <nav aria-label="Mobile" className="container-editorial flex-1 overflow-y-auto">
+            <nav aria-label={cmsCopy("aria-label.mobile", "Mobile")} className="container-editorial flex-1 overflow-y-auto">
               <ul className="divide-y divide-ivory/10">
                 {navigation.map((item, i) => (
                   <motion.li
@@ -126,20 +129,18 @@ export function SiteHeader({ navigation = MAIN_NAV, showVirtualTour = SHOW_VIRTU
                 ))}
               </ul>
               <div className="mt-8 grid grid-cols-2 gap-3 text-sm text-ivory/70">
-                <Link href="/gallery" onClick={() => setMenuOpen(false)} className="py-2">Gallery</Link>
+                <Link href="/gallery" onClick={() => setMenuOpen(false)} className="py-2">{cmsCopy("text.gallery", "Gallery")}</Link>
                 {showVirtualTour && (
-                  <Link href="/360-tour" onClick={() => setMenuOpen(false)} className="py-2">360° Tour</Link>
+                  <Link href="/360-tour" onClick={() => setMenuOpen(false)} className="py-2">{cmsCopy("text.360-tour", "360° Tour")}</Link>
                 )}
-                <Link href="/global-desk" onClick={() => setMenuOpen(false)} className="py-2">Global Desk</Link>
-                <Link href="/my-vijaya" onClick={() => setMenuOpen(false)} className="py-2">My VIJAYA</Link>
-                <Link href="/faq" onClick={() => setMenuOpen(false)} className="py-2">FAQ</Link>
-                <Link href="/contact" onClick={() => setMenuOpen(false)} className="py-2">Contact</Link>
+                <Link href="/global-desk" onClick={() => setMenuOpen(false)} className="py-2">{cmsCopy("text.global-desk", "Global Desk")}</Link>
+                <Link href="/my-vijaya" onClick={() => setMenuOpen(false)} className="py-2">{cmsCopy("text.my-vijaya", "My VIJAYA")}</Link>
+                <Link href="/faq" onClick={() => setMenuOpen(false)} className="py-2">{cmsCopy("text.faq", "FAQ")}</Link>
+                <Link href="/contact" onClick={() => setMenuOpen(false)} className="py-2">{cmsCopy("text.contact", "Contact")}</Link>
               </div>
             </nav>
             <div className="container-editorial pt-6">
-              <Link href="/check-your-date" onClick={() => track("hero_check_date_click", { source: "mobile_menu" })} className="btn-gold w-full">
-                Check Your Date
-              </Link>
+              <Link href="/check-your-date" onClick={() => track("hero_check_date_click", { source: "mobile_menu" })} className="btn-gold w-full">{cmsCopy("text.check-your-date-2", "Check Your Date")}</Link>
             </div>
           </motion.div>
         )}

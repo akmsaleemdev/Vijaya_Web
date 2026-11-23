@@ -25,6 +25,6 @@ export async function POST(req: Request) {
       idempotencyKey: idempotencyKey ?? randomUUID(), amount: booking.totalPayable, status: "INITIATED", method,
     } });
     if (!existing) await tx.auditLog.create({ data: { action: "PAYMENT_INITIATED", entity: "Payment", entityRef: payment.providerRef } });
-    return Response.json({ providerRef: payment.providerRef, amount: payment.amount, checkoutUrl: `/book/sandbox-gateway?ref=${reference}&pay=${payment.providerRef}` });
+    return Response.json({ providerRef: payment.providerRef, amount: Number(payment.amount), checkoutUrl: `/book/sandbox-gateway?ref=${reference}&pay=${payment.providerRef}` });
   });
 }

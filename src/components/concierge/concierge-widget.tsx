@@ -1,4 +1,6 @@
 "use client";
+import { useCmsCopy } from "@/lib/cms/client";
+
 
 /**
  * VIJAYA Event Concierge — a small, refined assistant.
@@ -26,6 +28,7 @@ const OPENING: Msg = {
 };
 
 export function ConciergeWidget() {
+  const cmsCopy = useCmsCopy("copy.components.concierge.concierge-widget");
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Msg[]>([OPENING]);
   const [input, setInput] = useState("");
@@ -82,14 +85,14 @@ export function ConciergeWidget() {
             transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
             className="w-[calc(100vw-2.5rem)] max-w-sm bg-ivory border border-border shadow-[0_24px_70px_-20px_rgba(17,17,17,0.45)] rounded-sm overflow-hidden"
             role="dialog"
-            aria-label="VIJAYA Event Concierge"
+            aria-label={cmsCopy("aria-label.vijaya-event-concierge", "VIJAYA Event Concierge")}
           >
             <div className="bg-burgundy text-ivory px-5 py-4 flex items-center justify-between">
               <div>
-                <p className="text-[13px] font-medium tracking-wide">VIJAYA Event Concierge</p>
-                <p className="text-[11px] text-ivory/60 mt-0.5">Verified information · live availability</p>
+                <p className="text-[13px] font-medium tracking-wide">{cmsCopy("text.vijaya-event-concierge", "VIJAYA Event Concierge")}</p>
+                <p className="text-[11px] text-ivory/60 mt-0.5">{cmsCopy("text.verified-information-live-availability", "Verified information · live availability")}</p>
               </div>
-              <button onClick={() => setOpen(false)} aria-label="Close concierge" className="p-1.5 hover:bg-ivory/10 rounded-sm transition-colors">
+              <button onClick={() => setOpen(false)} aria-label={cmsCopy("aria-label.close-concierge", "Close concierge")} className="p-1.5 hover:bg-ivory/10 rounded-sm transition-colors">
                 <X className="h-4 w-4" />
               </button>
             </div>
@@ -118,7 +121,7 @@ export function ConciergeWidget() {
               ))}
               {typing && (
                 <div className="flex justify-start">
-                  <div className="bg-muted rounded-sm px-4 py-3 flex gap-1.5" aria-label="Concierge is typing">
+                  <div className="bg-muted rounded-sm px-4 py-3 flex gap-1.5" aria-label={cmsCopy("aria-label.concierge-is-typing", "Concierge is typing")}>
                     {[0, 1, 2].map((d) => (
                       <span key={d} className="h-1.5 w-1.5 rounded-full bg-stone/60 animate-bounce" style={{ animationDelay: `${d * 0.15}s` }} />
                     ))}
@@ -137,11 +140,11 @@ export function ConciergeWidget() {
               <input
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder="Ask about spaces, dates or planning…"
-                aria-label="Message the concierge"
+                placeholder={cmsCopy("placeholder.ask-about-spaces-dates-or-planning", "Ask about spaces, dates or planning…")}
+                aria-label={cmsCopy("aria-label.message-the-concierge", "Message the concierge")}
                 className="flex-1 bg-transparent text-[13px] px-3 py-2.5 placeholder:text-stone/50 focus:outline-none"
               />
-              <button type="submit" disabled={typing || !input.trim()} aria-label="Send message" className="h-10 w-10 inline-flex items-center justify-center bg-burgundy text-ivory rounded-sm transition-opacity disabled:opacity-40">
+              <button type="submit" disabled={typing || !input.trim()} aria-label={cmsCopy("aria-label.send-message", "Send message")} className="h-10 w-10 inline-flex items-center justify-center bg-burgundy text-ivory rounded-sm transition-opacity disabled:opacity-40">
                 <Send className="h-4 w-4" />
               </button>
             </form>

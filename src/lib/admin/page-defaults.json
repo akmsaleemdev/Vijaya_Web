@@ -34,7 +34,9 @@
     "alt.illuminated-exterior-of-vijaya-international-conve": "Illuminated exterior of VIJAYA International Convention Centre",
     "text.your-occasion-starts-here": "Your Occasion Starts Here.",
     "text.check-your-date-2": "Check Your Date",
-    "text.book-a-venue-tour": "Book a Venue Tour"
+    "text.book-a-venue-tour": "Book a Venue Tour",
+    "seo.title": "VIJAYA International Convention Centre — A Frame for Possibilities",
+    "seo.description": "A premium destination for weddings, celebrations and business events in Thiruvalla, Kerala. Explore the halls, check your date and plan your occasion."
   },
   "page.360-tour": {
     "text.step-inside": "Step Inside",
@@ -46,7 +48,9 @@
     "text.scroll-pinch": "Scroll / Pinch",
     "text.zoom-into-the-detail": "Zoom into the detail",
     "text.hotspots": "Hotspots",
-    "text.jump-between-spaces": "Jump between spaces"
+    "text.jump-between-spaces": "Jump between spaces",
+    "seo.title": "360° Tour",
+    "seo.description": "Step inside VIJAYA — an immersive 360° tour of selected spaces. Drag to look around, zoom and jump between the grand hall, lobby and lake deck."
   },
   "page.about": {
     "eyebrow.about": "About",
@@ -65,13 +69,17 @@
     "text.the-vijaya-monogram-places-a-rising-v-inside-a-squ": "The VIJAYA monogram places a rising V inside a square frame — a mark of definition and openness at once. It appears unchanged across this platform, exactly as designed.",
     "text.brand-note": "Brand note: ",
     "text.is-also-known-by-its-legacy-abbreviation": " is also known by its legacy abbreviation ",
-    "text.the-uploaded-logo-assets-are-used-exactly-as-suppl": ". The uploaded logo assets are used exactly as supplied, without redrawing, restretching or recolouring."
+    "text.the-uploaded-logo-assets-are-used-exactly-as-suppl": ". The uploaded logo assets are used exactly as supplied, without redrawing, restretching or recolouring.",
+    "seo.title": "About VIJAYA",
+    "seo.description": "The story of VIJAYA International Convention Centre — a frame for possibilities, rooted in Thiruvalla, Kerala."
   },
   "page.booking-policy": {
     "eyebrow.policies": "Policies",
     "title.booking-policy": "Booking Policy",
     "image.space-nila-jpg": "/media/space-nila.jpg",
-    "intro.one-calendar-two-doors-online-and-offline-bookings": "One calendar, two doors — online and offline bookings stay synchronised so a date can never be promised twice."
+    "intro.one-calendar-two-doors-online-and-offline-bookings": "One calendar, two doors — online and offline bookings stay synchronised so a date can never be promised twice.",
+    "seo.title": "Booking Policy",
+    "seo.description": "How booking, holds, payments and confirmations work at VIJAYA International Convention Centre."
   },
   "page.business": {
     "eyebrow.business-mice": "Business & MICE",
@@ -95,13 +103,17 @@
     "text.verified-floor-plans-and-dimensional-drawings-are": "Verified floor plans and dimensional drawings are being surveyed and will be published per hall. In the meantime, our events team will share the current plan for your dates at quotation.",
     "text.request-a-quote": "Request a Quote",
     "text.explore-spaces": "Explore Spaces",
-    "text.thiruvalla-pathanamthitta-convenient-to-kottayam-a": " Thiruvalla, Pathanamthitta — convenient to Kottayam and the GCC corridor towns."
+    "text.thiruvalla-pathanamthitta-convenient-to-kottayam-a": " Thiruvalla, Pathanamthitta — convenient to Kottayam and the GCC corridor towns.",
+    "seo.title": "Business & MICE",
+    "seo.description": "Conferences, exhibitions, product launches and leadership events at VIJAYA International Convention Centre, Thiruvalla, Kerala — with AV-ready halls, parking and floor plans."
   },
   "page.cancellation-policy": {
     "eyebrow.policies": "Policies",
     "title.cancellation-policy": "Cancellation Policy",
     "image.space-pamba-jpg": "/media/space-pamba.jpg",
-    "intro.life-moves-when-plans-change-this-policy-keeps-the": "Life moves. When plans change, this policy keeps the process calm, transparent and fair to both sides."
+    "intro.life-moves-when-plans-change-this-policy-keeps-the": "Life moves. When plans change, this policy keeps the process calm, transparent and fair to both sides.",
+    "seo.title": "Cancellation Policy",
+    "seo.description": "Cancellation terms and refund framework for bookings at VIJAYA International Convention Centre."
   },
   "page.celebrations": {
     "eyebrow.celebrations-at-vijaya": "Celebrations at VIJAYA",
@@ -121,12 +133,16 @@
     "text.tell-us-what-you-re-celebrating": "Tell Us What You're Celebrating.",
     "text.share-the-date-the-guest-count-and-the-feeling-you": "Share the date, the guest count and the feeling you're after — the events team will shape the rest with you.",
     "text.plan-your-event": "Plan Your Event",
-    "text.check-your-date": "Check Your Date"
+    "text.check-your-date": "Check Your Date",
+    "seo.title": "Celebrations",
+    "seo.description": "Birthdays, anniversaries, cultural and community events at VIJAYA International Convention Centre, Thiruvalla — flexible halls, lakeside settings and outdoor grounds."
   },
   "page.check-your-date": {
     "text.plan-with-confidence": "Plan With Confidence",
     "text.check-your-date": "Check Your Date.",
-    "text.live-availability-across-every-bookable-space-the": "Live availability across every bookable space — the same calendar the VIJAYA booking office uses. Nine steps, about three minutes, a real hold on your date."
+    "text.live-availability-across-every-bookable-space-the": "Live availability across every bookable space — the same calendar the VIJAYA booking office uses. Nine steps, about three minutes, a real hold on your date.",
+    "seo.title": "Check Your Date",
+    "seo.description": "Check live availability across VIJAYA's bookable spaces — choose your event type, date, slot and guests, then hold your date in minutes."
   },
   "page.contact": {
     "eyebrow.contact": "Contact",
@@ -141,7 +157,9 @@
     "text.office-hours": " Office hours",
     "text.monday-saturday-9-30-am-6-00-pm": "Monday – Saturday, 9:30 AM – 6:00 PM",
     "text.event-days-the-venue-is-yours": "Event days — the venue is yours.",
-    "text.loading-form": "Loading form…"
+    "text.loading-form": "Loading form…",
+    "seo.title": "Contact",
+    "seo.description": "Reach VIJAYA International Convention Centre — phone, email and enquiry form. Thiruvalla, Pathanamthitta, Kerala."
   },
   "page.experiences": {
     "eyebrow.the-destination": "The Destination",
@@ -155,19 +173,25 @@
     "text.drag-to-look-around-zoom-into-details-and-jump-bet": "Drag to look around, zoom into details and jump between spaces — from the grand hall to the lake deck.",
     "text.enter-360-experience": "Enter 360° Experience",
     "src.pano-hall-jpg": "/media/pano-hall.jpg",
-    "alt.360-panorama-preview-placeholder": "360 panorama preview — placeholder"
+    "alt.360-panorama-preview-placeholder": "360 panorama preview — placeholder",
+    "seo.title": "Experiences",
+    "seo.description": "Architecture, arrival, landscape, the lake, VIP experience and hospitality — explore the VIJAYA destination beyond the halls."
   },
   "page.faq": {
     "eyebrow.faq": "FAQ",
     "title.questions-answered-calmly": "Questions, Answered Calmly.",
     "intro.booking-planning-facilities-and-policies-the-essen": "Booking, planning, facilities and policies — the essentials, without the jargon.",
-    "image.about-hero-jpg": "/media/about-hero.jpg"
+    "image.about-hero-jpg": "/media/about-hero.jpg",
+    "seo.title": "FAQ",
+    "seo.description": "Answers about booking, planning, facilities and policies at VIJAYA International Convention Centre."
   },
   "page.gallery": {
     "eyebrow.gallery": "Gallery",
     "title.the-destination-framed": "The Destination, Framed.",
     "intro.a-first-look-at-vijaya-placeholder-imagery-until-t": "A first look at VIJAYA — placeholder imagery until the new professional shoot premieres. Fullscreen lightbox included.",
-    "image.exp-arrival-jpg": "/media/exp-arrival.jpg"
+    "image.exp-arrival-jpg": "/media/exp-arrival.jpg",
+    "seo.title": "Gallery",
+    "seo.description": "Photography from VIJAYA International Convention Centre — property, weddings, corporate events, celebrations, outdoor settings and architectural details."
   },
   "page.global-desk": {
     "eyebrow.vijaya-global-desk": "VIJAYA Global Desk",
@@ -183,7 +207,8 @@
     "alt.kerala-wedding-setting-placeholder-visual": "Kerala wedding setting — placeholder visual",
     "text.global-desk-enquiry": "Global Desk Enquiry",
     "text.schedule-a-virtual-consultation": "Schedule a Virtual Consultation",
-    "text.tell-us-where-you-are-and-what-you-re-planning-the": "Tell us where you are and what you're planning — the Global Desk responds within one working day."
+    "text.tell-us-where-you-are-and-what-you-re-planning-the": "Tell us where you are and what you're planning — the Global Desk responds within one working day.",
+    "seo.title": "VIJAYA Global Desk"
   },
   "page.plan-your-event": {
     "eyebrow.plan-your-event": "Plan Your Event",
@@ -199,25 +224,33 @@
     "text.prefer-to-talk": "Prefer to talk?",
     "text.call": "Call ",
     "text.or-email": " or email ",
-    "text.contact-details-are-placeholders-pending-verificat": ". Contact details are placeholders pending verification."
+    "text.contact-details-are-placeholders-pending-verificat": ". Contact details are placeholders pending verification.",
+    "seo.title": "Plan Your Event",
+    "seo.description": "Tell VIJAYA about your occasion — event type, date, guests and preferences. Submit an event enquiry and the events team responds within one working day."
   },
   "page.privacy": {
     "eyebrow.legal": "Legal",
     "title.privacy-notice": "Privacy Notice",
     "image.exp-landscape-jpg": "/media/exp-landscape.jpg",
-    "intro.your-occasion-is-personal-so-is-your-data-this-not": "Your occasion is personal — so is your data. This notice explains what we collect, why, and the controls you have."
+    "intro.your-occasion-is-personal-so-is-your-data-this-not": "Your occasion is personal — so is your data. This notice explains what we collect, why, and the controls you have.",
+    "seo.title": "Privacy",
+    "seo.description": "How VIJAYA International Convention Centre collects, uses and protects your personal information."
   },
   "page.spaces": {
     "eyebrow.the-collection": "The Collection",
     "title.spaces-for-occasions-of-every-scale": "Spaces for Occasions of Every Scale.",
     "intro.nine-distinct-settings-from-the-grand-periyar-hall": "Nine distinct settings — from the grand Periyar hall to the quiet lake deck. Filter by setting, occasion or guest count to find yours.",
-    "image.exp-architecture-jpg": "/media/exp-architecture.jpg"
+    "image.exp-architecture-jpg": "/media/exp-architecture.jpg",
+    "seo.title": "Our Spaces",
+    "seo.description": "Explore every hall, pavilion and outdoor setting at VIJAYA International Convention Centre — filter by indoor or outdoor, occasion and guest count."
   },
   "page.terms": {
     "eyebrow.legal": "Legal",
     "title.terms-of-use": "Terms of Use",
     "image.exp-architecture-jpg": "/media/exp-architecture.jpg",
-    "intro.the-ground-rules-for-using-this-website-and-bookin": "The ground rules for using this website and booking platform."
+    "intro.the-ground-rules-for-using-this-website-and-bookin": "The ground rules for using this website and booking platform.",
+    "seo.title": "Terms of Use",
+    "seo.description": "Terms governing the use of the VIJAYA website and booking platform."
   },
   "page.venue-visit": {
     "eyebrow.venue-visit": "Venue Visit",
@@ -225,7 +258,9 @@
     "intro.a-private-visit-with-the-vijaya-events-team-halls": "A private visit with the VIJAYA events team — halls, lake, VIP facilities and the spots only locals know. Bring your questions; we bring the coffee.",
     "image.about-hero-jpg": "/media/about-hero.jpg",
     "text.loading-form": "Loading form…",
-    "text.visits-run-in-two-windows-on-most-days-morning-and": "Visits run in two windows on most days — morning and afternoon. If your date falls on an event day, we'll suggest the closest alternative so you see the destination at its calmest."
+    "text.visits-run-in-two-windows-on-most-days-morning-and": "Visits run in two windows on most days — morning and afternoon. If your date falls on an event day, we'll suggest the closest alternative so you see the destination at its calmest.",
+    "seo.title": "Book a Venue Visit",
+    "seo.description": "Walk VIJAYA before you book — request a private venue visit with the events team, with your event in mind."
   },
   "page.weddings": {
     "eyebrow.weddings-at-vijaya": "Weddings at VIJAYA",
@@ -255,6 +290,34 @@
     "text.the-vijaya-global-desk": "The VIJAYA Global Desk",
     "text.virtual-consultations-remote-date-checking-and-dig": "virtual consultations, remote date checking and digital documentation — built for families across the UAE, Qatar, Oman, Saudi Arabia, Kuwait and Bahrain.",
     "text.visit-the-global-desk": "Visit the Global Desk",
-    "text.check-your-date": "Check Your Date"
+    "text.check-your-date": "Check Your Date",
+    "seo.title": "Weddings",
+    "seo.description": "Grand weddings and receptions at VIJAYA International Convention Centre, Thiruvalla — indoor halls, lakeside ceremonies, NRI planning support and private venue tours."
+  },
+  "page.book.reference": {
+    "seo.title": "Booking Details",
+    "seo.description": "Submit or track your VIJAYA reservation."
+  },
+  "page.my-vijaya": {
+    "seo.title": "My VIJAYA — Sign In",
+    "seo.description": "Access your VIJAYA booking — payments, documents, event plan and support."
+  },
+  "page.my-vijaya.booking": {
+    "seo.title": "Portal — Booking"
+  },
+  "page.my-vijaya.dashboard": {
+    "seo.title": "Portal — Overview"
+  },
+  "page.my-vijaya.documents": {
+    "seo.title": "Portal — Documents"
+  },
+  "page.my-vijaya.event-plan": {
+    "seo.title": "Portal — Event Plan"
+  },
+  "page.my-vijaya.payments": {
+    "seo.title": "Portal — Payments"
+  },
+  "page.my-vijaya.support": {
+    "seo.title": "Portal — Support"
   }
 }

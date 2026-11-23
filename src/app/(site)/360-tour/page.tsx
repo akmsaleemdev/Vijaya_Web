@@ -1,4 +1,4 @@
-import { pageCopy, pageMetadata } from "@/lib/content";
+import { pageCopy, pageMetadata, siteContent } from "@/lib/content";
 import type { Metadata } from "next";
 import { SCENES_360 } from "@/lib/data/content";
 import { Panorama360Wrapper } from "@/components/panorama/panorama-360-wrapper";
@@ -11,7 +11,7 @@ const metadata: Metadata = {
 };
 
 export default async function Tour360Page() {
-  const copy = await pageCopy("360-tour");
+  const [copy, scenes] = await Promise.all([pageCopy("360-tour"), siteContent("site.scenes")]);
   return (
     <main className="bg-ink min-h-screen">
       <div className="container-editorial pt-28 md:pt-36 pb-16">
@@ -22,7 +22,7 @@ export default async function Tour360Page() {
         <p className="mt-3 text-[11px] uppercase tracking-[0.2em] text-ivory/40">{copy("text.placeholder-panoramas-replaced-with-original-insta", "Placeholder panoramas — replaced with original Insta360 equirectangular exports after the official shoot")}</p>
       </div>
       <div className="container-editorial pb-24">
-        <Panorama360Wrapper scenes={SCENES_360} />
+        <Panorama360Wrapper scenes={scenes ?? SCENES_360} />
         <div className="mt-10 grid gap-4 md:grid-cols-3 text-ivory/70 text-[13px] font-light">
           <div className="hairline-t-light pt-4"><span className="text-gold block text-[10px] uppercase tracking-[0.2em] mb-1.5">{copy("text.drag", "Drag")}</span>{copy("text.look-around-each-space", "Look around each space")}</div>
           <div className="hairline-t-light pt-4"><span className="text-gold block text-[10px] uppercase tracking-[0.2em] mb-1.5">{copy("text.scroll-pinch", "Scroll / Pinch")}</span>{copy("text.zoom-into-the-detail", "Zoom into the detail")}</div>

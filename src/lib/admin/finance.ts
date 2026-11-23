@@ -37,7 +37,7 @@ export async function notifications(req: Request, actor: Identity) {
   const booking = await db.booking.findUnique({ where: { reference } });
   if (!booking?.customerEmail) return failure(404, "NOT_FOUND", "No customer email was found for the booking.");
   const entry = await db.contentEntry.findUnique({ where: { key_locale: { key: "email.templates", locale: "en" } } });
-  const checked = schemaFor("email.templates")?.safeParse(entry?.published ? JSON.parse(entry.published) : {});
+  const checked = schemaFor("email.templates")?.safeParse(entry?.published ?? {});
   const overrides = checked?.success ? checked.data as Partial<typeof templates> : {};
   const text = overrides[template] ?? templates[template];
   const vars: Record<string, string> = { name: booking.customerName, date: booking.eventDate, venue: booking.spaceName, reference };

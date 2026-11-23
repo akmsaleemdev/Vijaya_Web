@@ -1,3 +1,6 @@
+"use client";
+
+import { useCmsCopy } from "@/lib/cms/client";
 import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
 import type { SpaceRecord } from "@/lib/data/spaces";
@@ -6,6 +9,7 @@ import { Media } from "@/components/media/media";
 import { Reveal } from "@/components/motion/reveal";
 
 export function VenueCard({ space, index = 0 }: { space: SpaceRecord; index?: number }) {
+  const cmsCopy = useCmsCopy("copy.components.booking.venue-card");
   const range = space.guestRange ? `${space.guestRange[0]}–${space.guestRange[1]} guests` : "Capacity to be confirmed";
   const price = space.pricing.EVENING ?? space.pricing.fullDay;
   return (
@@ -34,12 +38,11 @@ export function VenueCard({ space, index = 0 }: { space: SpaceRecord; index?: nu
         <div className="flex items-center justify-between gap-4 pt-4">
           <p className="text-[13px] text-stone">{range}</p>
           {price ? (
-            <p className="text-[12px] text-stone">
-              From <span className="text-ink font-medium">{inr(price)}</span>
-              <span className="text-[10px] uppercase tracking-wider text-stone/70"> · sample</span>
+            <p className="text-[12px] text-stone">{cmsCopy("text.from", "From ")}<span className="text-ink font-medium">{inr(price)}</span>
+              <span className="text-[10px] uppercase tracking-wider text-stone/70">{cmsCopy("text.sample", " · sample")}</span>
             </p>
           ) : (
-            <p className="text-[12px] text-stone">On request</p>
+            <p className="text-[12px] text-stone">{cmsCopy("text.on-request", "On request")}</p>
           )}
         </div>
       </Link>

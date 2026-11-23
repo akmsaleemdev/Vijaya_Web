@@ -1,10 +1,13 @@
 "use client";
+import { useCmsCopy } from "@/lib/cms/client";
+
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, LogIn } from "lucide-react";
 
 export function PortalLogin() {
+  const cmsCopy = useCmsCopy("copy.components.portal.portal-login");
   const router = useRouter();
   const [reference, setReference] = useState("");
   const [email, setEmail] = useState("");
@@ -43,26 +46,26 @@ export function PortalLogin() {
   return (
     <div>
       <div className="text-center mb-8">
-        <p className="eyebrow-dark">My VIJAYA</p>
-        <h1 className="h-section mt-3">Your Event, In Your Hands.</h1>
-        <p className="lede mt-3 text-[14px]">Sign in with your booking reference and the email you booked with.</p>
+        <p className="eyebrow-dark">{cmsCopy("text.my-vijaya", "My VIJAYA")}</p>
+        <h1 className="h-section mt-3">{cmsCopy("text.your-event-in-your-hands", "Your Event, In Your Hands.")}</h1>
+        <p className="lede mt-3 text-[14px]">{cmsCopy("text.sign-in-with-your-booking-reference-and-the-e", "Sign in with your booking reference and the email you booked with.")}</p>
       </div>
       <form onSubmit={submit} noValidate className="card-editorial p-8">
         <div className="space-y-5">
           <div>
-            <label className="label-vij" htmlFor="pl-ref">Booking Reference</label>
+            <label className="label-vij" htmlFor="pl-ref">{cmsCopy("text.booking-reference", "Booking Reference")}</label>
             <input
               id="pl-ref"
               className="input-vij font-mono tracking-[0.12em] uppercase"
-              placeholder="VIJ-XXXXXX"
+              placeholder={cmsCopy("placeholder.vij-xxxxxx", "VIJ-XXXXXX")}
               value={reference}
               onChange={(e) => setReference(e.target.value.toUpperCase())}
               autoComplete="off"
             />
           </div>
           <div>
-            <label className="label-vij" htmlFor="pl-email">Email</label>
-            <input id="pl-email" type="email" className="input-vij" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
+            <label className="label-vij" htmlFor="pl-email">{cmsCopy("text.email", "Email")}</label>
+            <input id="pl-email" type="email" className="input-vij" placeholder={cmsCopy("placeholder.you-example-com", "you@example.com")} value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
           </div>
         </div>
         {error && (
@@ -76,14 +79,10 @@ export function PortalLogin() {
           <span>{loading ? "Signing in" : "Sign In"}</span>
         </button>
         <div className="hairline-t mt-7 pt-5">
-          <p className="text-[12px] leading-6 text-stone">
-            Don't have a booking yet? <a href="/check-your-date" className="link-underline text-burgundy">Check your date</a> to begin.
-          </p>
+          <p className="text-[12px] leading-6 text-stone">{cmsCopy("text.don-t-have-a-booking-yet", "Don't have a booking yet? ")}<a href="/check-your-date" className="link-underline text-burgundy">{cmsCopy("text.check-your-date", "Check your date")}</a>{cmsCopy("text.to-begin", " to begin.")}</p>
         </div>
       </form>
-      <button onClick={fillDemo} className="mt-5 w-full text-center text-[12px] text-stone hover:text-burgundy transition-colors">
-        Try the demo booking — VIJ-DEMO01 · demo@vijaya.example
-      </button>
+      <button onClick={fillDemo} className="mt-5 w-full text-center text-[12px] text-stone hover:text-burgundy transition-colors">{cmsCopy("text.try-the-demo-booking-vij-demo01-demo-vijaya-e", "Try the demo booking — VIJ-DEMO01 · demo@vijaya.example")}</button>
     </div>
   );
 }

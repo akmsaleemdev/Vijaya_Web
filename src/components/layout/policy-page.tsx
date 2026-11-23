@@ -1,9 +1,11 @@
+
+import { getComponentCopy } from "@/lib/cms/read";
 import { PageHero } from "@/components/layout/page-hero";
 import { Breadcrumbs } from "@/components/seo/breadcrumbs";
 import { Reveal } from "@/components/motion/reveal";
 
 /** Shared shell for policy/legal pages. */
-export function PolicyPage({
+export async function PolicyPage({
   eyebrow,
   title,
   intro,
@@ -20,6 +22,7 @@ export function PolicyPage({
   updated: string;
   sections: { heading: string; body: string[] }[];
 }) {
+  const cmsCopy = await getComponentCopy("copy.components.layout.policy-page");
   return (
     <main className="pb-24">
       <PageHero eyebrow={eyebrow} title={title} intro={intro} image={image} height="mid" />
@@ -27,7 +30,7 @@ export function PolicyPage({
         <div className="container-editorial max-w-3xl">
           <Breadcrumbs items={[{ label: "Home", href: "/" }, { label: crumb }]} />
           <Reveal>
-            <p className="text-[12px] uppercase tracking-[0.18em] text-stone">Last reviewed: {updated}</p>
+            <p className="text-[12px] uppercase tracking-[0.18em] text-stone">{cmsCopy("text.last-reviewed", "Last reviewed: ")}{updated}</p>
           </Reveal>
           <div className="mt-10 space-y-12">
             {sections.map((s, i) => (
@@ -42,10 +45,7 @@ export function PolicyPage({
             ))}
           </div>
           <Reveal className="mt-14 card-editorial p-6">
-            <p className="text-[12px] leading-6 text-stone">
-              Policy note: the final commercial terms are being confirmed by VICC management. Where a clause above
-              depends on that confirmation it is marked provisional and will be updated before production launch.
-            </p>
+            <p className="text-[12px] leading-6 text-stone">{cmsCopy("text.policy-note-the-final-commercial-terms-are-be", "Policy note: the final commercial terms are being confirmed by VICC management. Where a clause above depends on that confirmation it is marked provisional and will be updated before production launch.")}</p>
           </Reveal>
         </div>
       </section>

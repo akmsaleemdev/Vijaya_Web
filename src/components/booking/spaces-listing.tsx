@@ -1,4 +1,6 @@
 "use client";
+import { useCmsCopy } from "@/lib/cms/client";
+
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
@@ -12,6 +14,7 @@ type SettingFilter = "ALL" | "INDOOR" | "OUTDOOR";
 type OccasionFilter = "ALL" | "WEDDING" | "BUSINESS" | "CELEBRATION";
 
 export function SpacesListing({ spaces = SPACES }: { spaces?: SpaceRecord[] } = {}) {
+  const cmsCopy = useCmsCopy("copy.components.booking.spaces-listing");
   const [setting, setSetting] = useState<SettingFilter>("ALL");
   const [occasion, setOccasion] = useState<OccasionFilter>("ALL");
   const [guests, setGuests] = useState("");
@@ -34,13 +37,13 @@ export function SpacesListing({ spaces = SPACES }: { spaces?: SpaceRecord[] } = 
     }`;
 
   return (
-    <section className="py-16 md:py-24" aria-label="Spaces listing">
+    <section className="py-16 md:py-24" aria-label={cmsCopy("aria-label.spaces-listing", "Spaces listing")}>
       <div className="container-editorial">
         {/* FILTERS */}
         <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6 pb-8 hairline-b">
           <div className="flex flex-wrap gap-6">
             <div>
-              <p className="label-vij">Setting</p>
+              <p className="label-vij">{cmsCopy("text.setting", "Setting")}</p>
               <div className="flex gap-2">
                 {(["ALL", "INDOOR", "OUTDOOR"] as const).map((v) => (
                   <button key={v} onClick={() => setSetting(v)} className={chip(setting === v)} aria-pressed={setting === v}>
@@ -50,7 +53,7 @@ export function SpacesListing({ spaces = SPACES }: { spaces?: SpaceRecord[] } = 
               </div>
             </div>
             <div>
-              <p className="label-vij">Occasion</p>
+              <p className="label-vij">{cmsCopy("text.occasion", "Occasion")}</p>
               <div className="flex gap-2">
                 {(["ALL", "WEDDING", "BUSINESS", "CELEBRATION"] as const).map((v) => (
                   <button key={v} onClick={() => { setOccasion(v); track("event_type_selected", { source: "spaces_filter", type: v }); }} className={chip(occasion === v)} aria-pressed={occasion === v}>
@@ -61,12 +64,12 @@ export function SpacesListing({ spaces = SPACES }: { spaces?: SpaceRecord[] } = 
             </div>
           </div>
           <div className="min-w-[220px]">
-            <label htmlFor="guest-filter" className="label-vij">Guest Count</label>
+            <label htmlFor="guest-filter" className="label-vij">{cmsCopy("text.guest-count", "Guest Count")}</label>
             <input
               id="guest-filter"
               type="number"
               min={10}
-              placeholder="e.g. 300"
+              placeholder={cmsCopy("placeholder.e-g-300", "e.g. 300")}
               value={guests}
               onChange={(e) => setGuests(e.target.value)}
               className="input-vij !min-h-[42px] !py-2"
@@ -78,10 +81,10 @@ export function SpacesListing({ spaces = SPACES }: { spaces?: SpaceRecord[] } = 
         {filtered.length === 0 ? (
           <div className="py-24 text-center">
             <SearchX className="h-8 w-8 text-stone/50 mx-auto" aria-hidden />
-            <h2 className="mt-4 text-xl font-normal">No spaces match these filters</h2>
-            <p className="mt-2 text-sm text-stone">Try widening the guest count or clearing a filter — or ask the concierge for a recommendation.</p>
+            <h2 className="mt-4 text-xl font-normal">{cmsCopy("text.no-spaces-match-these-filters", "No spaces match these filters")}</h2>
+            <p className="mt-2 text-sm text-stone">{cmsCopy("text.try-widening-the-guest-count-or-clearing-a-fi", "Try widening the guest count or clearing a filter — or ask the concierge for a recommendation.")}</p>
             <button onClick={() => { setSetting("ALL"); setOccasion("ALL"); setGuests(""); }} className="btn-outline mt-6">
-              <span>Clear Filters</span>
+              <span>{cmsCopy("text.clear-filters", "Clear Filters")}</span>
             </button>
           </div>
         ) : (
@@ -116,15 +119,13 @@ export function SpacesListing({ spaces = SPACES }: { spaces?: SpaceRecord[] } = 
                       <p className="text-[13px] text-stone">
                         {s.guestRange ? `${s.guestRange[0]}–${s.guestRange[1]} guests (indicative)` : "Capacity to be confirmed"}
                       </p>
-                      <p className="text-[12px] text-stone/80 mt-1">Best for: {s.idealEventTypes.slice(0, 2).join(" · ")}</p>
+                      <p className="text-[12px] text-stone/80 mt-1">{cmsCopy("text.best-for", "Best for: ")}{s.idealEventTypes.slice(0, 2).join(" · ")}</p>
                     </div>
                     <Link
                       href={`/check-your-date?venue=${s.slug}`}
                       className="link-underline text-[11px] uppercase tracking-[0.18em] text-burgundy"
                       onClick={() => track("booking_started", { venue: s.slug, source: "listing_card" })}
-                    >
-                      Check Availability
-                    </Link>
+                    >{cmsCopy("text.check-availability", "Check Availability")}</Link>
                   </div>
                 </article>
               </Reveal>

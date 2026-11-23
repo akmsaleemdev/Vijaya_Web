@@ -15,7 +15,7 @@ type Booking = {
   notesLog: { id: string; note: string }[];
 };
 
-const statuses = ["HOLD", "PENDING_APPROVAL", "PENDING_PAYMENT", "CONFIRMED", "CANCELLED", "REJECTED", "EXPIRED", "COMPLETED", "NO_SHOW"];
+const statuses = ["PENDING_HOLD", "PENDING_APPROVAL", "PENDING_PAYMENT", "CONFIRMED", "CANCELLED", "REJECTED", "EXPIRED", "COMPLETED", "NO_SHOW"];
 export function ManualBooking({ venues, date, customer }: { venues: VenueOption[]; date?: string; customer?: { name: string; email: string; phone: string } }) {
   const [key, setKey] = useState(() => typeof crypto.randomUUID === "function" ? crypto.randomUUID() : String(Date.now()));
   return <details className="v-panel" open={!!customer}><summary className="cursor-pointer font-semibold">Create a manual booking</summary>
@@ -67,7 +67,7 @@ function BookingDetail({ reference, venues, operations }: { reference: string; v
     {row.history.map((item) => <p key={item.id}>{item.action.replaceAll("_", " ")} · {new Date(item.createdAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}</p>)}
     {operations && <div className="v-stack v-actions">
       <h2>Booking actions</h2>
-      {["HOLD", "PENDING_APPROVAL", "PENDING_PAYMENT", "CONFIRMED"].includes(row.status) && <div className="v-grid">
+      {["PENDING_HOLD", "PENDING_APPROVAL", "PENDING_PAYMENT", "CONFIRMED"].includes(row.status) && <div className="v-grid">
         {row.status !== "CONFIRMED" && <Form label="Confirm booking" submit={() => send({ action: "CONFIRM" })}><p>Confirm the existing hold.</p></Form>}
         <Form label="Apply cancellation or rejection" confirm="Release the session and update the booking?" submit={(form) => send({ action: value(form, "action"), reason: value(form, "reason") })}>
           <Select name="action" label="Action" options={row.status === "CONFIRMED" ? ["CANCEL"] : ["CANCEL", "REJECT"]} />

@@ -1,3 +1,5 @@
+import { invalidateContent } from "@/lib/cms/revalidate";
+import { totalContract } from "@/lib/booking/amounts";
 import { hash } from "bcryptjs";
 import { z } from "zod";
 import { db } from "@/lib/db";
@@ -25,24 +27,28 @@ const sessionInput = z.object({
 export async function venues(req: Request, actor: Identity, id?: string) {
   if (req.method === "GET") return success(await db.space.findMany({ orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }));
   if (req.method === "DELETE") {
-    return bookingTransaction(async (tx) => {
+    const archived = await bookingTransaction(async (tx) => {
       const before = id && await tx.space.findUnique({ where: { id } });
       if (!before) return failure(404, "NOT_FOUND", "Venue not found.");
       const after = await tx.space.update({ where: { id: before.id }, data: { active: false, bookableOnline: false } });
       await audit(tx, actor, "VENUE_ARCHIVED", "Space", before.id, before, after);
       return success(after);
     });
+    if (archived.ok && id) invalidateContent("venue." + id);
+    return archived;
   }
   const result = venueInput.safeParse(await req.json().catch(() => null));
   if (!result.success) return failure(422, "INVALID_VENUE", "Check the venue fields and capacity range.", result.error.issues);
   const { id: venueId, pricing, ...values } = result.data;
-  return bookingTransaction(async (tx) => {
+  const saved = await bookingTransaction(async (tx) => {
     const before = await tx.space.findUnique({ where: { id: venueId } });
     const data = { ...values, pricingJson: pricing ? JSON.stringify(pricing) : undefined };
     const after = await tx.space.upsert({ where: { id: venueId }, create: { id: venueId, ...data }, update: data });
     await audit(tx, actor, before ? "VENUE_UPDATED" : "VENUE_CREATED", "Space", venueId, before, after);
     return success(after);
   });
+  if (saved.ok) invalidateContent("venue." + venueId);
+  return saved;
 }
 
 export async function sessions(req: Request, actor: Identity) {
@@ -81,7 +87,7 @@ export async function customers(req: Request, actor: Identity) {
   if (req.method === "GET") {
     const email = z.email().safeParse(new URL(req.url).searchParams.get("email"));
     if (email.success) return success({
-      bookings: await db.booking.findMany({ where: { customerEmail: email.data }, select: { reference: true, eventDate: true, status: true, spaceName: true, payments: { select: { amount: true, status: true } } }, orderBy: { eventDate: "desc" } }),
+      bookings: await db.booking.findMany({ where: { customerEmail: email.data }, select: { reference: true, eventDate: true, status: true, spaceName: true, payments: { select: { amount: true, status: true } } }, orderBy: { eventDate: "desc" } }).then((rows) => rows.map((row) => ({ ...row, payments: row.payments.map((payment) => ({ ...payment, amount: Number(payment.amount) })) }))),
       notes: await db.customerNote.findMany({ where: { email: email.data }, orderBy: { createdAt: "desc" } }),
     });
     const rows = await db.booking.groupBy({ by: ["customerEmail"], where: { customerEmail: { not: "" } }, _count: { _all: true }, _max: { customerName: true, eventDate: true }, orderBy: { _max: { eventDate: "desc" } }, take: 200 });
@@ -162,13 +168,13 @@ export async function dashboard() {
     db.booking.findMany({ where: { holdExpiresAt: { gt: now, lte: new Date(now.getTime() + 15 * 60_000) } }, take: 10, orderBy: { holdExpiresAt: "asc" }, select: { reference: true, eventDate: true, spaceName: true, holdExpiresAt: true } }),
   ]);
   const confirmed = bookings.filter((b) => b.status === "CONFIRMED");
-  const pending = bookings.filter((b) => ["HOLD", "PENDING_PAYMENT", "PENDING_APPROVAL"].includes(b.status));
+  const pending = bookings.filter((b) => ["PENDING_HOLD", "PENDING_PAYMENT", "PENDING_APPROVAL"].includes(b.status));
   const group = (values: string[]) => Array.from(values.reduce((map, value) => map.set(value, (map.get(value) ?? 0) + 1), new Map<string, number>()), ([name, count]) => ({ name, count }));
   const history = bookings.filter((b) => b.eventDate >= yearAgo && ["CONFIRMED", "COMPLETED", "NO_SHOW"].includes(b.status));
   const revenue = new Map<string, number>();
   for (const b of bookings) for (const p of b.payments) if (p.status === "SUCCESS") {
     const month = indiaDate(p.paidAt ?? p.createdAt).slice(0, 7);
-    revenue.set(month, (revenue.get(month) ?? 0) + p.amount);
+    revenue.set(month, (revenue.get(month) ?? 0) + Number(p.amount));
   }
   const list = (rows: typeof bookings) => rows.slice(0, 10).map(({ reference, eventDate, spaceName, status }) => ({ reference, eventDate, spaceName, status }));
   return success({
@@ -177,8 +183,8 @@ export async function dashboard() {
       "Next 7 days": confirmed.filter((b) => b.eventDate >= today && b.eventDate < end(7)).length,
       "Next 30 days": confirmed.filter((b) => b.eventDate >= today && b.eventDate < end(30)).length,
       "Pending approvals": pending.length, "New enquiries": newEnquiries,
-      "Monthly revenue": monthly.reduce((sum, p) => sum + p.amount, 0),
-      "Outstanding balance": confirmed.reduce((sum, b) => sum + Math.max(0, b.baseAmount + b.weekendUplift + b.taxAmount - b.payments.reduce((paid, p) => paid + (p.status === "SUCCESS" ? p.amount : 0), 0)), 0),
+      "Monthly revenue": monthly.reduce((sum, p) => sum + Number(p.amount), 0),
+      "Outstanding balance": confirmed.reduce((sum, b) => sum + Math.max(0, totalContract(b) - b.payments.reduce((paid, p) => paid + (p.status === "SUCCESS" ? Number(p.amount) : 0), 0)), 0),
     },
     charts: { "Bookings per month": group(history.map((b) => b.eventDate.slice(0, 7))), "Revenue trend": Array.from(revenue, ([name, count]) => ({ name, count })).sort((a, b) => a.name.localeCompare(b.name)).slice(-12), "Venue activity": group(history.map((b) => b.spaceName)), "Event types": group(history.map((b) => b.eventType)) },
     next: list(confirmed.filter((b) => b.eventDate >= today)), pending: list(pending), expiring,

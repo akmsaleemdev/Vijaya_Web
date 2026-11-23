@@ -14,6 +14,7 @@ type Row = Record<string, SQLiteValue>;
 
 function normalized(value: SQLiteValue, type: string) {
   if (value === null) return null;
+  if (type === "jsonb" && typeof value === "string") return JSON.parse(value);
   if (type === "boolean") {
     if (value !== 0 && value !== 1 && value !== BigInt(0) && value !== BigInt(1)) throw new Error("Invalid legacy boolean.");
     return value === 1 || value === BigInt(1);
@@ -48,7 +49,7 @@ async function importDatabase() {
     if (integrity !== "ok") throw new Error("SQLite integrity check failed.");
     const counts = await pg.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT pg_advisory_xact_lock(20261123, 1) IS NULL AS locked`;
-      const rowsCopied: Record<string, number> = {};
+      const rowsCopied: Record<string, { source: number; inserted: number }> = {};
       for (const table of durableTables) {
         const target = Prisma.raw(`"vijaya"."${table}"`);
         const populated = await tx.$queryRaw<{ populated: boolean }[]>`SELECT EXISTS (SELECT 1 FROM ${target}) AS populated`;
@@ -71,13 +72,15 @@ async function importDatabase() {
           const mapped: Record<string, unknown> = {};
           for (const [field, value] of Object.entries(row)) {
             const type = known.get(field);
-            if (type) mapped[field] = normalized(value, type);
+            if (type) mapped[field] = table === "Booking" && field === "status" && value === "HOLD" ? "PENDING_HOLD" : normalized(value, type);
           }
           batch.push(mapped);
           if (batch.length === 250) await flush();
         }
         await flush();
-        rowsCopied[table] = total;
+        const source = Number(sqlite.prepare(`SELECT COUNT(*) AS total FROM "${table}"`).get()?.total);
+        if (source !== total) throw new Error(`Row count mismatch for ${table}.`);
+        rowsCopied[table] = { source, inserted: total };
       }
       return rowsCopied;
     }, { timeout: 600_000, maxWait: 30_000 });

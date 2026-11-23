@@ -30,14 +30,14 @@ creating a reservation. A trusted scheduler can also call
 
 ## Content
 
-Publish content from **Website content**. The CMS exposes editable defaults and
+Run `npm run db:seed` after migrations to provision missing content, venues, and the first Super Admin. Edit content from **Website content**. Save drafts for review and publish when ready. The CMS exposes editable defaults and
 stores drafts and version history. The public pages read published records and
 fall back to their original content. Draft preview is available from the CMS while
 signed in. Malayalam records are selected for Malayalam browser preferences, with
 English source content as fallback. Use `venue.<slug>` for venue fields such as
 `name`, `shortDescription`, `longDescription`, `heroImage`, `heroImageAlt`, and
 newline-separated `gallery`, `galleryAlts` or `amenities`. The media library
-returns local URLs for use in the CMS. Set page-level metadata on a page content
+returns versioned URLs for use in the CMS. Public assets live in the site-media bucket and documents in a private bucket. Set page-level metadata on a page content
 entry using `seo.title`, `seo.description`, `seo.ogImage`, and `seo.canonical`.
 
 ## Project structure

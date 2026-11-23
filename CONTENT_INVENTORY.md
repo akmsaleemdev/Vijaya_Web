@@ -80,3 +80,9 @@ Inventory of GitHub main at `cff58ff` before the CMS seed refactor. No next-intl
 | `src/app/api/concierge/route.ts` | Concierge replies and recommendations | Shared site concierge |
 | `public/media` | Existing image, video and PDF assets | Public pages, hero, venue pages and gallery |
 | `public/brand` | Existing brand assets | Header, footer, booking and portal |
+
+## Managed coverage
+
+The seed imports the public venue, gallery, FAQ, experience, scene and navigation objects directly. The page and component catalogs preserve original literal values for their tracked attributes and text nodes. The website serves the source defaults when a record is absent, and preserves any saved locale that did not ship with the original frontend.
+
+Some assembled operational messages, inline object-list copy, and programmatically generated links still live in application code. Booking statuses, references, availability, prices, accessibility state and authenticated customer data are computed at request time.

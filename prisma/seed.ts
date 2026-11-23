@@ -6,6 +6,7 @@ import { loadEnvConfig } from "@next/env";
 import { hash } from "bcryptjs";
 import { z } from "zod";
 import { PrismaClient } from "@prisma/client";
+import { seedContent } from "./seed-content";
 import { SPACES } from "../src/lib/data/spaces";
 
 loadEnvConfig(process.cwd());
@@ -49,6 +50,7 @@ async function main() {
       });
     }
   }
+  console.log(`CMS seed wrote ${await seedContent(db, process.argv.includes("--force"))} entries.`);
   if (process.env.SEED_DEMO_DATA !== "true" || process.env.NODE_ENV === "production") return;
 
   // Sample CRM-side blocks so the calendar demonstrates the offline booking sync.

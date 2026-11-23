@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { mkdir, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import sharp from "sharp";
@@ -7,7 +7,7 @@ import { db } from "@/lib/db";
 import { bookingTransaction } from "@/lib/booking/transaction";
 import { audit, failure, success, type Identity } from "./http";
 
-import { supabaseMedia } from "@/lib/media/remote-storage";
+import { documentsBucket, siteMediaBucket, supabaseMedia } from "@/lib/media/remote-storage";
 import { assetId, uploadsDir, uploadPath } from "@/lib/media/upload-storage";
 const uploadMeta = z.object({ alt: z.string().max(300), folder: z.string().max(80), tags: z.string().max(250) });
 const maxSize = 4 * 1024 * 1024;
@@ -21,21 +21,23 @@ function sniff(buffer: Buffer) {
 
 export async function media(req: Request, actor: Identity, id?: string) {
   if (req.method === "GET") return success(await db.mediaAsset.findMany({ orderBy: { createdAt: "desc" }, take: 300 }));
-  const storage = supabaseMedia();
   if (req.method === "DELETE") {
     if (!assetId.safeParse(id).success) return failure(422, "INVALID_FILE", "Choose a valid file.");
     const removed = await bookingTransaction(async (tx) => {
       const row = await tx.mediaAsset.findUnique({ where: { id } });
       if (!row) return failure(404, "NOT_FOUND", "File not found.");
       const contains = `/api/media/${row.id}.`;
-      const references = await tx.contentEntry.count({ where: { OR: [{ draft: { contains } }, { published: { contains } }] } })
-        + await tx.contentVersion.count({ where: { payload: { contains } } });
-      if (references) return failure(409, "MEDIA_IN_USE", "The file is referenced by current content or saved history.");
+      const references = await tx.$queryRaw<{ used: boolean }[]>`
+        SELECT EXISTS (SELECT 1 FROM "ContentEntry" WHERE strpos(draft::text, ${contains}) > 0 OR strpos(published::text, ${contains}) > 0
+          UNION ALL SELECT 1 FROM "ContentVersion" WHERE strpos(payload::text, ${contains}) > 0) AS used
+      `;
+      if (references[0]?.used) return failure(409, "MEDIA_IN_USE", "The file is referenced by current content or saved history.");
       await tx.mediaAsset.delete({ where: { id } });
       await audit(tx, actor, "MEDIA_DELETED", "MediaAsset", row.id, row);
       return row;
     });
     if (removed instanceof Response) return removed;
+    const storage = supabaseMedia(removed.storageBucket ?? (process.env.SUPABASE_MEDIA_BUCKET || siteMediaBucket()));
     if (storage) {
       const { error } = await storage.remove([removed.filename]);
       if (error) console.error("Media file cleanup failed", removed.id);
@@ -70,6 +72,9 @@ export async function media(req: Request, actor: Identity, id?: string) {
   if (!type) return failure(422, "INVALID_FILE", "Unsupported file.");
   const idValue = randomUUID();
   const filename = `${idValue}.${type.ext}`;
+  const bucket = type.mime === "application/pdf" ? documentsBucket() : siteMediaBucket();
+  const storage = supabaseMedia(bucket);
+  const version = createHash("sha256").update(buffer).digest("hex").slice(0, 16);
   const target = uploadPath(filename);
   if (buffer.length > maxSize) return failure(413, "FILE_TOO_LARGE", "Upload a file under 4 MB.");
   if (storage) {
@@ -81,7 +86,7 @@ export async function media(req: Request, actor: Identity, id?: string) {
   }
   try {
     const row = await bookingTransaction(async (tx) => {
-      const item = await tx.mediaAsset.create({ data: { id: idValue, filename, mime: type.mime, size: buffer.length, ...meta.data } });
+      const item = await tx.mediaAsset.create({ data: { id: idValue, filename, mime: type.mime, size: buffer.length, storageBucket: storage ? bucket : null, version, ...meta.data } });
       await audit(tx, actor, "MEDIA_UPLOADED", "MediaAsset", item.id, undefined, item);
       return item;
     });

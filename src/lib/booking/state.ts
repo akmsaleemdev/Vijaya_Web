@@ -1,10 +1,10 @@
-import type { Booking, Prisma, SlotState } from "@prisma/client";
+import type { Booking, BookingStatus, Prisma, SlotState, SlotStatus } from "@prisma/client";
 import { COMBO_RULES } from "@/lib/data/spaces";
 import { intervals, overlaps, slotKeys, utcRange } from "./slots";
 import { bookingTransaction } from "./transaction";
 
-export const heldStatuses = ["HOLD", "PENDING_PAYMENT"];
-export const pendingStatuses = [...heldStatuses, "PENDING_APPROVAL"];
+export const heldStatuses: BookingStatus[] = ["PENDING_HOLD", "PENDING_PAYMENT"];
+export const pendingStatuses: BookingStatus[] = [...heldStatuses, "PENDING_APPROVAL"];
 export function physicalSpaces(slug: string) {
   return COMBO_RULES.find((combo) => combo.active && combo.comboSlug === slug)?.childSlugs ?? [slug];
 }
@@ -25,7 +25,10 @@ export function matchesRange(row: Pick<SlotState, "startMinute" | "endMinute" | 
 class SlotConflict extends Error {}
 
 export function isSlotConflict(error: unknown) {
-  return error instanceof SlotConflict;
+  if (error instanceof SlotConflict) return true;
+  if (error instanceof Error && /SlotState_no_overlap|Booking_no_overlap|23P01/.test(error.message)) return true;
+  return !!error && typeof error === "object" && "meta" in error && !!error.meta &&
+    typeof error.meta === "object" && "code" in error.meta && error.meta.code === "23P01";
 }
 
 export async function expireIn(tx: Prisma.TransactionClient, now = new Date()) {
@@ -46,7 +49,7 @@ export const expireHolds = () => bookingTransaction((tx) => expireIn(tx));
 
 export async function reserve(tx: Prisma.TransactionClient, data: {
   spaceSlug: string; date: string; slot: string; range: readonly [number, number];
-  status: string; source: string; bookingRef?: string; holdExpiresAt?: Date; note?: string; groupId?: string;
+  status: SlotStatus; source: string; bookingRef?: string; holdExpiresAt?: Date; note?: string; groupId?: string;
 }) {
   const spaceIds = physicalSpaces(data.spaceSlug);
   // Check the interval inside the write transaction so callers get a stable

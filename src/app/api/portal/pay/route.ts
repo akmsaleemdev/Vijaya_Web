@@ -1,3 +1,4 @@
+import { totalContract } from "@/lib/booking/amounts";
 import { bookingMode } from "@/lib/payments/settings";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
@@ -15,15 +16,15 @@ export async function POST(req: Request) {
   return bookingTransaction(async (tx) => {
     if ((await bookingMode(tx)) !== "SANDBOX") return Response.json({ error: "Online payments are unavailable." }, { status: 403 });
     const booking = await tx.booking.findFirst({
-      where: { customerEmail: session.email, status: { in: ["CONFIRMED", "PENDING_PAYMENT", "HOLD"] } },
+      where: { customerEmail: session.email, status: { in: ["CONFIRMED", "PENDING_PAYMENT", "PENDING_HOLD"] } },
       include: { payments: true }, orderBy: { eventDate: "desc" },
     });
     if (!booking || booking.status !== "CONFIRMED") return Response.json({ error: "Booking is not confirmed." }, { status: 409 });
     const idempotencyKey = `portal:${booking.id}:${key ?? "balance"}`;
     const existing = await tx.payment.findUnique({ where: { idempotencyKey } });
     if (existing) return Response.json({ ok: true, providerRef: existing.providerRef });
-    const paid = booking.payments.filter((payment) => payment.status === "SUCCESS").reduce((sum, payment) => sum + payment.amount, 0);
-    const amount = booking.baseAmount + booking.weekendUplift + booking.taxAmount - paid;
+    const paid = booking.payments.filter((payment) => payment.status === "SUCCESS").reduce((sum, payment) => sum + Number(payment.amount), 0);
+    const amount = totalContract(booking) - paid;
     if (amount <= 0) return Response.json({ error: "The booking balance is already settled." }, { status: 409 });
     const providerRef = "SBX-" + randomUUID();
     await tx.payment.create({ data: { bookingId: booking.id, provider: "SANDBOX", providerRef, idempotencyKey, amount, status: "SUCCESS", method: "sandbox", paidAt: new Date() } });

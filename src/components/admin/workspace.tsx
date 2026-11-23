@@ -113,7 +113,7 @@ function Venues() {
   </div></Load>;
 }
 
-type ContentRow = { id: string; key: string; locale: string; draft: string; published: string | null; editedBy: string; updatedAt: string; versions: { id: string; createdAt: string }[] };
+type ContentRow = { id: string; key: string; locale: string; draft: unknown; published: unknown; editedBy: string; updatedAt: string; versions: { id: string; createdAt: string }[] };
 const pages = ["home", "about", "booking-policy", "business", "cancellation-policy", "celebrations", "check-your-date", "contact", "experiences", "faq", "gallery", "global-desk", "plan-your-event", "privacy", "spaces", "terms", "venue-visit", "weddings"];
 const contentTypes = ["home.hero", "gallery.items", "site.navigation", "site.footer", "site.faq", "site.contact", "site.announcement", "site.seo", "collections.testimonials", "collections.offers", "collections.team", "collections.awards", "collections.news", ...pages.map((page) => "page." + page)];
 function ContentEditor({ owner, settings = false }: { owner: boolean; settings?: boolean }) {
@@ -121,11 +121,12 @@ function ContentEditor({ owner, settings = false }: { owner: boolean; settings?:
   const defaults = useData<Record<string, unknown>>("content?defaults=true");
   const [contentKey, setKey] = useState(settings ? "site.settings" : "home.hero");
   const [locale, setLocale] = useState("en");
-  const row = entries.data?.find((item) => item.key === contentKey && item.locale === locale);
   const [custom, setCustom] = useState("");
   const [previewing, setPreviewing] = useState(false);
   const key = contentKey === "custom" ? custom : contentKey;
-  const templates = settings ? ["site.settings", "site.contact", "site.seo", "email.templates"] : [...contentTypes, "custom"];
+  const row = entries.data?.find((item) => item.key === key && item.locale === locale);
+  const available = Array.from(new Set([...contentTypes, ...Object.keys(defaults.data ?? {}), ...(entries.data ?? []).map((entry) => entry.key)]));
+  const templates = settings ? ["site.settings", "site.contact", "site.seo", "email.templates"] : [...available.filter((item) => owner || !["site.settings", "email.templates"].includes(item)), "custom"];
   return <Load query={entries}><section className="v-panel v-stack">
     <div className="v-row">
       <label>Content section<select value={contentKey} onChange={(e) => setKey(e.target.value)}>{templates.map((tag) => <option key={tag}>{tag}</option>)}</select></label>
@@ -135,9 +136,9 @@ function ContentEditor({ owner, settings = false }: { owner: boolean; settings?:
     <div className="v-row"><span className="v-pill">{row?.published ? "Published" : row ? "Draft" : "Using site defaults"}</span>{row && <span className="v-muted">Edited {new Date(row.updatedAt).toLocaleString("en-IN")} · {row.editedBy}</span>}</div>
     <Form key={row?.updatedAt ?? key + locale + (defaults.data ? "-loaded" : "")} label="Save content" submit={(form) => request("content", json({ key, locale, action: value(form, "action"), payload: JSON.parse(value(form, "payload")) }))}>
       <Select name="action" label="Workflow" options={["DRAFT", "PUBLISH"]} />
-      {key === "gallery.items" ? <GalleryEditor initial={row ? JSON.parse(row.draft) : (defaults.data?.[key] as React.ComponentProps<typeof GalleryEditor>["initial"] | undefined) ?? []} />
-        : key === "collections.news" ? <NewsEditor initial={row ? JSON.parse(row.draft) : []} />
-        : <label>Content (JSON)<textarea name="payload" rows={16} className="font-mono" defaultValue={row ? JSON.stringify(JSON.parse(row.draft), null, 2) : key === "home.hero" ? '{\n  "heading": "Every Great Occasion Deserves a Grand Address."\n}' : JSON.stringify(defaults.data?.[key] ?? {}, null, 2)} required /></label>}
+      {key === "gallery.items" ? <GalleryEditor initial={((row?.draft ?? defaults.data?.[key]) as React.ComponentProps<typeof GalleryEditor>["initial"] | undefined) ?? []} />
+        : key === "collections.news" ? <NewsEditor initial={(row?.draft as React.ComponentProps<typeof NewsEditor>["initial"] | undefined) ?? []} />
+        : <label>Content (JSON)<textarea name="payload" rows={16} className="font-mono" defaultValue={row ? JSON.stringify(row.draft, null, 2) : key === "home.hero" ? '{\n  "heading": "Every Great Occasion Deserves a Grand Address."\n}' : JSON.stringify(defaults.data?.[key] ?? {}, null, 2)} required /></label>}
 
     </Form>
     <div className="v-row">
@@ -162,7 +163,7 @@ function Media() {
     </Form></section>
     <Load query={query}><div className="v-grid">{query.data?.map((row) => <article className="v-panel v-stack" key={row.id}>
       <strong>{text(row, "alt") || text(row, "mime")}</strong><p>{text(row, "folder")} {text(row, "tags")}</p>
-      <a className="v-link break-all" href={`/api/media/${text(row, "filename")}`}>/api/media/{text(row, "filename")}</a>
+      <a className="v-link break-all" href={`/api/media/${text(row, "filename")}${row.version ? "?v=" + text(row, "version") : ""}`}>/api/media/{text(row, "filename")}{row.version ? "?v=" + text(row, "version") : ""}</a>
       <Form label="Delete file" confirm="Delete this media file permanently?" submit={() => request("media/" + row.id, { method: "DELETE" })}>{null}</Form>
     </article>)}</div>{!query.data?.length && <p className="v-muted">No uploaded files.</p>}</Load>
   </div>;

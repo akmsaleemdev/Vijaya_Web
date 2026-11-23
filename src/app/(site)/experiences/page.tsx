@@ -1,3 +1,5 @@
+
+import { getComponentCopy } from "@/lib/cms/read";
 import { pageCopy, pageMetadata, siteContent } from "@/lib/content";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -15,8 +17,9 @@ const metadata: Metadata = {
 };
 
 export default async function ExperiencesPage() {
+  const cmsCopy = await getComponentCopy("copy.app.site.experiences.page");
   const showVirtualTour = (await siteContent("site.settings"))?.showVirtualTour ?? SHOW_VIRTUAL_TOUR;
-  const copy = await pageCopy("experiences");
+  const [copy, experiences] = await Promise.all([pageCopy("experiences"), siteContent("site.experiences")]);
   return (
     <main>
       <PageHero
@@ -24,7 +27,7 @@ export default async function ExperiencesPage() {
         title={copy("title.beyond-the-halls-a-world-composed", "Beyond the Halls, a World Composed.")}
         intro={copy("intro.architecture-and-landscape-arrival-and-farewell-wa", "Architecture and landscape, arrival and farewell, water and light — VIJAYA is designed as one continuous experience.")}
         image={copy("image.destinations-section-hero-image1-vicc-webp", "/media/Destinations Section_Hero Image1-VICC.webp")}
-        imageAlt="The VIJAYA International Convention Centre destination at a glance"
+        imageAlt={cmsCopy("imageAlt.the-vijaya-international-convention-centre-de", "The VIJAYA International Convention Centre destination at a glance")}
         overlayClassName="bg-gradient-to-r from-ink/85 via-ink/45 to-transparent"
         quality={95}
         tag={false}
@@ -33,7 +36,7 @@ export default async function ExperiencesPage() {
 
       <section className="py-16 md:py-24" aria-label={copy("aria-label.destination-experiences", "Destination experiences")}>
         <div className="container-editorial">
-          {EXPERIENCES.map((b, i) => {
+          {(experiences ?? EXPERIENCES).map((b, i) => {
             const flipped = i % 2 === 1;
             return (
               <article key={b.id} id={b.id} className="grid gap-10 lg:grid-cols-2 lg:items-center py-12 md:py-20 scroll-mt-24">

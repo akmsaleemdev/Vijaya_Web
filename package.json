@@ -16,7 +16,9 @@
     "test": "node --import tsx --test tests/*.test.ts",
     "build:standalone": "next build && cp -r .next/static .next/standalone/.next/ && cp -r public .next/standalone/",
     "postinstall": "prisma generate",
-    "db:import-sqlite": "node --import tsx scripts/import-sqlite.ts"
+    "db:import-sqlite": "node --import tsx scripts/migrate-sqlite-to-supabase.ts",
+    "db:seed-content": "node --import tsx prisma/seed-content.ts",
+    "db:verify-seed": "node --import tsx scripts/verify-seed.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

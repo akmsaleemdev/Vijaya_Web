@@ -1,4 +1,6 @@
 "use client";
+import { useCmsCopy } from "@/lib/cms/client";
+
 
 /**
  * SpaceGallery — premium editorial gallery for a space detail page.
@@ -207,19 +209,20 @@ function Lightbox({
   onNext: () => void;
   onPrev: () => void;
 }) {
+  const cmsCopy = useCmsCopy("copy.components.spaces.space-gallery");
   return (
     <div
       className="fixed inset-0 z-[70] bg-ink/95 flex items-center justify-center"
       role="dialog"
       aria-modal="true"
-      aria-label="Image lightbox"
+      aria-label={cmsCopy("aria-label.image-lightbox", "Image lightbox")}
       onClick={onClose}
     >
       <button
         type="button"
         onClick={onClose}
         className="absolute top-5 right-5 p-3 text-ivory/70 hover:text-ivory transition-colors"
-        aria-label="Close lightbox"
+        aria-label={cmsCopy("aria-label.close-lightbox", "Close lightbox")}
       >
         <X className="h-6 w-6" />
       </button>
@@ -230,7 +233,7 @@ function Lightbox({
           onPrev();
         }}
         className="absolute left-4 md:left-8 p-3 text-ivory/70 hover:text-ivory transition-colors"
-        aria-label="Previous image"
+        aria-label={cmsCopy("aria-label.previous-image", "Previous image")}
       >
         <ChevronLeft className="h-8 w-8" />
       </button>
@@ -247,7 +250,7 @@ function Lightbox({
           onNext();
         }}
         className="absolute right-4 md:right-8 p-3 text-ivory/70 hover:text-ivory transition-colors"
-        aria-label="Next image"
+        aria-label={cmsCopy("aria-label.next-image", "Next image")}
       >
         <ChevronRight className="h-8 w-8" />
       </button>

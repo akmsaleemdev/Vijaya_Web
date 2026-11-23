@@ -1,3 +1,5 @@
+
+import { getComponentCopy } from "@/lib/cms/read";
 import { pageCopy, pageMetadata } from "@/lib/content";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -6,7 +8,7 @@ import { PageHero } from "@/components/layout/page-hero";
 import { Reveal, MaskReveal } from "@/components/motion/reveal";
 import { Media } from "@/components/media/media";
 import { VenueCard } from "@/components/booking/venue-card";
-import { SPACES } from "@/lib/data/spaces";
+import { getPublicVenue } from "@/lib/venue-content";
 
 const metadata: Metadata = {
   title: "Celebrations",
@@ -24,8 +26,9 @@ const TYPES = [
 ];
 
 export default async function CelebrationsPage() {
+  const cmsCopy = await getComponentCopy("copy.app.site.celebrations.page");
   const copy = await pageCopy("celebrations");
-  const spaces = CEL_SPACES.map((s) => SPACES.find((x) => x.slug === s)!).filter(Boolean);
+  const spaces = (await Promise.all(CEL_SPACES.map(getPublicVenue))).filter((space) => space !== null);
 
   return (
     <main>
@@ -34,7 +37,7 @@ export default async function CelebrationsPage() {
         title={copy("title.every-occasion-deserves-its-own-kind-of-grand", "Every Occasion Deserves Its Own Kind of Grand.")}
         intro={copy("intro.milestone-birthdays-anniversaries-cultural-program", "Milestone birthdays, anniversaries, cultural programmes and community gatherings — flexible spaces that scale from fifty guests to a festival.")}
         image={copy("image.image-celebrations-homepage-vijaya-vicc-webp", "/media/Image_Celebrations-Homepage-Vijaya-VICC.webp")}
-        imageAlt="Celebration experience at VIJAYA International Convention Centre"
+        imageAlt={cmsCopy("imageAlt.celebration-experience-at-vijaya-internationa", "Celebration experience at VIJAYA International Convention Centre")}
         overlayClassName="bg-gradient-to-r from-ink/90 via-ink/50 to-transparent"
         quality={95}
         tag={false}

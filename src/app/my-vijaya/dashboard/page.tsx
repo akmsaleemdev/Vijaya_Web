@@ -1,3 +1,7 @@
+import { totalContract as bookingTotal } from "@/lib/booking/amounts";
+import { pageMetadata } from "@/lib/content";
+
+import { getComponentCopy } from "@/lib/cms/read";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { CalendarDays, MapPin, Wallet, UserCheck, Flag, BadgeCheck } from "lucide-react";
@@ -5,9 +9,10 @@ import { getPortalSession, getPortalBookings } from "@/lib/portal-auth";
 import { inr } from "@/lib/pricing";
 import { SLOTS } from "@/lib/site-config";
 
-export const metadata: Metadata = { title: "Portal — Overview" };
+const metadata: Metadata = { title: "Portal — Overview" };
 
 export default async function PortalDashboardPage() {
+  const cmsCopy = await getComponentCopy("copy.app.my-vijaya.dashboard.page");
   const session = await getPortalSession();
   if (!session) redirect("/my-vijaya");
   const bookings = await getPortalBookings(session.email);
@@ -17,15 +22,15 @@ export default async function PortalDashboardPage() {
     return (
       <main className="py-16">
         <div className="container-editorial max-w-xl text-center">
-          <h1 className="h-section">Welcome to My VIJAYA</h1>
-          <p className="lede mt-4">No active booking was found on your account yet.</p>
+          <h1 className="h-section">{cmsCopy("text.welcome-to-my-vijaya", "Welcome to My VIJAYA")}</h1>
+          <p className="lede mt-4">{cmsCopy("text.no-active-booking-was-found-on-your-account-y", "No active booking was found on your account yet.")}</p>
         </div>
       </main>
     );
   }
 
-  const paid = b.payments.filter((p) => p.status === "SUCCESS").reduce((s, p) => s + p.amount, 0);
-  const totalContract = b.baseAmount + b.weekendUplift + b.taxAmount;
+  const paid = b.payments.filter((p) => p.status === "SUCCESS").reduce((s, p) => s + Number(p.amount), 0);
+  const totalContract = bookingTotal(b);
   const balance = Math.max(0, totalContract - paid);
   const nextMilestone = b.milestones.find((m) => m.status !== "DONE");
   const slotLabel = SLOTS.find((s) => s.id === b.slot)?.label || b.slot;
@@ -42,13 +47,12 @@ export default async function PortalDashboardPage() {
   return (
     <main className="py-12 md:py-16">
       <div className="container-editorial">
-        <p className="eyebrow-dark">Overview</p>
-        <h1 className="h-section mt-3">Hello, {b.customerName.split(" ")[0]}.</h1>
-        <p className="lede mt-3 max-w-2xl text-[14px]">
-          Everything about your {b.spaceName} booking in one calm place. Reference{" "}
+        <p className="eyebrow-dark">{cmsCopy("text.overview", "Overview")}</p>
+        <h1 className="h-section mt-3">{cmsCopy("text.hello", "Hello, ")}{b.customerName.split(" ")[0]}.</h1>
+        <p className="lede mt-3 max-w-2xl text-[14px]">{cmsCopy("text.everything-about-your", "Everything about your ")}{b.spaceName}{cmsCopy("text.booking-in-one-calm-place-reference", " booking in one calm place. Reference")}{" "}
           <span className="font-mono text-burgundy">{b.reference}</span>.
           {b.crmSync === "QUEUED" && (
-            <span className="ml-2 text-[12px] text-stone">(CRM sync queued — updates flow to the CRM when it connects.)</span>
+            <span className="ml-2 text-[12px] text-stone">{cmsCopy("text.crm-sync-queued-updates-flow-to-the-crm-when", "(CRM sync queued — updates flow to the CRM when it connects.)")}</span>
           )}
         </p>
 
@@ -64,17 +68,18 @@ export default async function PortalDashboardPage() {
 
         <div className="mt-8 card-editorial p-6">
           <div className="flex items-center justify-between mb-3">
-            <p className="text-[13px] font-medium uppercase tracking-[0.16em]">Payment progress</p>
+            <p className="text-[13px] font-medium uppercase tracking-[0.16em]">{cmsCopy("text.payment-progress", "Payment progress")}</p>
             <p className="text-[12px] text-stone">{totalContract > 0 ? Math.round((paid / totalContract) * 100) : 0}%</p>
           </div>
           <div className="h-2 bg-muted rounded-full overflow-hidden">
             <div className="h-full bg-burgundy rounded-full" style={{ width: `${totalContract > 0 ? Math.min(100, Math.round((paid / totalContract) * 100)) : 0}%` }} />
           </div>
           <p className="mt-3 text-[12px] text-stone">
-            {inr(paid)} of {inr(totalContract)} · balance {inr(balance)} due per your payment schedule.
-          </p>
+            {inr(paid)}{cmsCopy("text.of", " of ")}{inr(totalContract)}{cmsCopy("text.balance", " · balance ")}{inr(balance)}{cmsCopy("text.due-per-your-payment-schedule", " due per your payment schedule.")}</p>
         </div>
       </div>
     </main>
   );
 }
+
+export const generateMetadata = () => pageMetadata("my-vijaya.dashboard", metadata);

@@ -1,8 +1,11 @@
+
+import { getComponentCopy } from "@/lib/cms/read";
 import { pageCopy, pageMetadata, siteContent } from "@/lib/content";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight, ArrowUpRight, ChevronDown, Globe2, Maximize } from "lucide-react";
 import { getPublicVenues } from "@/lib/venue-content";
+import { HOME_HERO, HOME_OCCASIONS } from "@/lib/cms/site-defaults";
 import { DESTINATION_BLOCKS } from "@/lib/data/content";
 import { Media } from "@/components/media/media";
 import { HeroBackground } from "@/components/media/hero-background";
@@ -20,8 +23,11 @@ const metadata: Metadata = {
 };
 
 export default async function HomePage() {
+  const cmsCopy = await getComponentCopy("copy.app.site.page");
   const [copy, hero, settings] = await Promise.all([pageCopy("home"), siteContent("home.hero"), siteContent("site.settings")]);
   const showVirtualTour = settings?.showVirtualTour ?? SHOW_VIRTUAL_TOUR;
+  const occasions = (await siteContent("home.occasions")) ?? HOME_OCCASIONS;
+  const destinations = (await siteContent("home.destinations")) ?? DESTINATION_BLOCKS;
   const featuredSpaces = (await getPublicVenues()).filter((s) => s.bookableOnline).slice(0, 6);
 
   return (
@@ -31,8 +37,8 @@ export default async function HomePage() {
         <HeroBackground
           sourceType="selfHosted"
           selfHostedSources={{
-            mp4: hero?.desktop ?? "/media/vijaya-hero-desktop.mp4",
-            mp4Mobile: hero?.mobile ?? "/media/vijaya-hero-mobile.mp4",
+            mp4: hero?.desktop ?? HOME_HERO.desktop,
+            mp4Mobile: hero?.mobile ?? HOME_HERO.mobile,
           }}
           posterImage={hero?.poster ?? copy("posterImage.hero-video-poster-jpg", "/media/hero-video-poster.jpg")}
           posterAlt={hero?.posterAlt ?? copy("posterAlt.vijaya-hero-video-opening-frame", "VIJAYA hero video — opening frame")}
@@ -43,15 +49,15 @@ export default async function HomePage() {
         <div className="relative z-10 container-editorial h-full flex flex-col justify-end pb-24 md:pb-28">
           <HeroText
             lines={[
-              <p key="eyebrow" className="eyebrow">{hero?.eyebrow ?? "VIJAYA International Convention Centre"}</p>,
+              <p key="eyebrow" className="eyebrow">{hero?.eyebrow ?? HOME_HERO.eyebrow}</p>,
               <h1 key="h1" className="h-hero text-ivory mt-5 max-w-5xl">
-                {hero?.heading ?? <>Every Great Occasion Deserves a&nbsp;Grand&nbsp;Address.</>}
+                {hero?.heading ?? <>{cmsCopy("text.every-great-occasion-deserves-a-grand-address", "Every Great Occasion Deserves a Grand Address.")}</>}
               </h1>,
             ]}
           />
           <Reveal delay={0.7}>
             <p className="lede !text-ivory/70 mt-6 max-w-xl">
-              {hero?.intro ?? "A premium destination for weddings, celebrations and business events — set in the heart of Kerala."}
+              {hero?.intro ?? HOME_HERO.intro}
             </p>
           </Reveal>
           <Reveal delay={0.85}>
@@ -78,11 +84,7 @@ export default async function HomePage() {
             <h2 id="planning" className="h-section mt-3 max-w-2xl">{copy("text.what-are-you-planning", "What Are You Planning?")}</h2>
           </Reveal>
           <div className="mt-10 grid gap-4 md:grid-cols-3">
-            {[
-              { href: "/weddings", img: "/media/Image-01.webp", title: "Wedding", alt: "Wedding celebration at VIJAYA International Convention Centre", copy: "Weddings, receptions and every ritual between — framed at scale." },
-              { href: "/business", img: "/media/Image_Business Events-Homepage-Vijaya-VICC.webp", title: "Business Event", alt: "Business conference at VIJAYA International Convention Centre", copy: "Conferences, exhibitions and leadership events, operationally precise." },
-              { href: "/celebrations", img: "/media/Image_Celebrations-Homepage-Vijaya-VICC.webp", title: "Celebration", alt: "Celebration experience at VIJAYA International Convention Centre", copy: "Birthdays, anniversaries, cultural and community occasions." },
-            ].map((p, i) => (
+            {occasions.map((p, i) => (
               <Reveal key={p.href} delay={i * 0.1}>
                 <TrackLink href={p.href} event="event_type_selected" meta={{ type: p.title }} className="group relative block aspect-[3/4] overflow-hidden">
                   <Media src={p.img} alt={p.alt} tag={false} className="object-center transition-transform duration-[1.6s] ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:scale-[1.07]" sizes="(max-width: 768px) 100vw, 33vw" />
@@ -190,7 +192,7 @@ export default async function HomePage() {
             <h2 id="destination" className="h-section mt-3 max-w-xl">{copy("text.beyond-the-halls", "Beyond the Halls")}</h2>
           </Reveal>
           <div className="mt-12 grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4">
-            {DESTINATION_BLOCKS.map((b, i) => (
+            {destinations.map((b, i) => (
               <Reveal key={b.title} delay={(i % 3) * 0.08}>
                 <Link href={b.href} className="group relative block aspect-[4/3] overflow-hidden">
                   <Media src={b.image} alt={`${b.title} at VIJAYA International Convention Centre`} className="transition-transform duration-[1.4s] group-hover:scale-105" sizes="(max-width: 768px) 50vw, 33vw" quality={95} tag={false} />

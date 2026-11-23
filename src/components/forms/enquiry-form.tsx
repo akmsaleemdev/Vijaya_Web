@@ -1,4 +1,6 @@
 "use client";
+import { useCmsCopy } from "@/lib/cms/client";
+
 
 import { useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
@@ -13,6 +15,7 @@ const inputCls = "input-vij";
 const errCls = "mt-1.5 text-[12px] text-destructive";
 
 export function EnquiryForm({ variant }: { variant: Variant }) {
+  const cmsCopy = useCmsCopy("copy.components.forms.enquiry-form");
   const params = useSearchParams();
   const [state, setState] = useState<"idle" | "sending" | "done" | "error">("idle");
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -91,7 +94,7 @@ export function EnquiryForm({ variant }: { variant: Variant }) {
     return (
       <div className="card-editorial p-10 text-center">
         <CheckCircle2 className="h-10 w-10 text-available mx-auto" aria-hidden />
-        <h3 className="mt-5 text-xl font-normal">Thank you — we've received your enquiry.</h3>
+        <h3 className="mt-5 text-xl font-normal">{cmsCopy("text.thank-you-we-ve-received-your-enquiry", "Thank you — we've received your enquiry.")}</h3>
         <p className="mt-3 text-[14px] font-light leading-7 text-stone max-w-md mx-auto">
           {variant === "VENUE_VISIT"
             ? "The VIJAYA events team will confirm your visit slot shortly. We look forward to welcoming you."
@@ -99,8 +102,7 @@ export function EnquiryForm({ variant }: { variant: Variant }) {
             ? "The Global Desk will reach out within one working day to schedule your virtual consultation."
             : "The VIJAYA events team will respond within one working day."}
         </p>
-        <p className="mt-6 text-[13px] text-stone">
-          Urgent? Call us at{" "}
+        <p className="mt-6 text-[13px] text-stone">{cmsCopy("text.urgent-call-us-at", "Urgent? Call us at")}{" "}
           <a href={SITE.contact.phoneHref} onClick={() => track("phone_clicked", { source: variant.toLowerCase() })} className="text-burgundy font-medium link-underline">
             {SITE.contact.phone}
           </a>
@@ -113,22 +115,22 @@ export function EnquiryForm({ variant }: { variant: Variant }) {
     <form onSubmit={submit} noValidate className="card-editorial p-6 md:p-10">
       <div className="grid gap-6 sm:grid-cols-2">
         <div>
-          <label className="label-vij" htmlFor="ef-name">Full Name *</label>
-          <input id="ef-name" className={inputCls} value={f.name} onChange={set("name")} autoComplete="name" placeholder="Your name" aria-invalid={!!errors.name} />
+          <label className="label-vij" htmlFor="ef-name">{cmsCopy("text.full-name", "Full Name *")}</label>
+          <input id="ef-name" className={inputCls} value={f.name} onChange={set("name")} autoComplete="name" placeholder={cmsCopy("placeholder.your-name", "Your name")} aria-invalid={!!errors.name} />
           {errors.name && <p className={errCls} role="alert">{errors.name}</p>}
         </div>
         <div>
-          <label className="label-vij" htmlFor="ef-phone">Phone *</label>
-          <input id="ef-phone" className={inputCls} value={f.phone} onChange={set("phone")} autoComplete="tel" placeholder="+91 …" aria-invalid={!!errors.phone} />
+          <label className="label-vij" htmlFor="ef-phone">{cmsCopy("text.phone", "Phone *")}</label>
+          <input id="ef-phone" className={inputCls} value={f.phone} onChange={set("phone")} autoComplete="tel" placeholder={cmsCopy("placeholder.91", "+91 …")} aria-invalid={!!errors.phone} />
           {errors.phone && <p className={errCls} role="alert">{errors.phone}</p>}
         </div>
         <div>
-          <label className="label-vij" htmlFor="ef-email">Email *</label>
-          <input id="ef-email" type="email" className={inputCls} value={f.email} onChange={set("email")} autoComplete="email" placeholder="you@example.com" aria-invalid={!!errors.email} />
+          <label className="label-vij" htmlFor="ef-email">{cmsCopy("text.email", "Email *")}</label>
+          <input id="ef-email" type="email" className={inputCls} value={f.email} onChange={set("email")} autoComplete="email" placeholder={cmsCopy("placeholder.you-example-com", "you@example.com")} aria-invalid={!!errors.email} />
           {errors.email && <p className={errCls} role="alert">{errors.email}</p>}
         </div>
         <div>
-          <label className="label-vij" htmlFor="ef-country">Country</label>
+          <label className="label-vij" htmlFor="ef-country">{cmsCopy("text.country", "Country")}</label>
           <select id="ef-country" className={inputCls} value={f.country} onChange={set("country")}>
             {["India", "United Arab Emirates", "Qatar", "Oman", "Saudi Arabia", "Kuwait", "Bahrain", "United Kingdom", "United States", "Singapore", "Other"].map((c) => (
               <option key={c}>{c}</option>
@@ -138,7 +140,7 @@ export function EnquiryForm({ variant }: { variant: Variant }) {
 
         {(variant === "PLAN_EVENT" || variant === "VENUE_VISIT" || variant === "GLOBAL_DESK") && (
           <div>
-            <label className="label-vij" htmlFor="ef-type">Event Type</label>
+            <label className="label-vij" htmlFor="ef-type">{cmsCopy("text.event-type", "Event Type")}</label>
             <select id="ef-type" className={inputCls} value={f.eventType} onChange={set("eventType")}>
               {EVENT_CATEGORIES.map((c) => (
                 <option key={c.id} value={c.id}>{c.label}</option>
@@ -150,12 +152,12 @@ export function EnquiryForm({ variant }: { variant: Variant }) {
         {variant === "PLAN_EVENT" && (
           <>
             <div>
-              <label className="label-vij" htmlFor="ef-date">Preferred Date *</label>
+              <label className="label-vij" htmlFor="ef-date">{cmsCopy("text.preferred-date", "Preferred Date *")}</label>
               <input id="ef-date" type="date" className={inputCls} min={new Date().toISOString().slice(0, 10)} value={f.eventDate} onChange={set("eventDate")} aria-invalid={!!errors.eventDate} />
               {errors.eventDate && <p className={errCls} role="alert">{errors.eventDate}</p>}
             </div>
             <div>
-              <label className="label-vij" htmlFor="ef-slot">Preferred Slot</label>
+              <label className="label-vij" htmlFor="ef-slot">{cmsCopy("text.preferred-slot", "Preferred Slot")}</label>
               <select id="ef-slot" className={inputCls} value={f.slot} onChange={set("slot")}>
                 {SLOTS.map((s) => (
                   <option key={s.id} value={s.id}>{s.label} — {s.time}</option>
@@ -163,21 +165,21 @@ export function EnquiryForm({ variant }: { variant: Variant }) {
               </select>
             </div>
             <div>
-              <label className="label-vij" htmlFor="ef-guests">Expected Guests</label>
-              <input id="ef-guests" type="number" min={10} className={inputCls} value={f.guests} onChange={set("guests")} placeholder="e.g. 300" />
+              <label className="label-vij" htmlFor="ef-guests">{cmsCopy("text.expected-guests", "Expected Guests")}</label>
+              <input id="ef-guests" type="number" min={10} className={inputCls} value={f.guests} onChange={set("guests")} placeholder={cmsCopy("placeholder.e-g-300", "e.g. 300")} />
             </div>
             <div>
-              <label className="label-vij" htmlFor="ef-setting">Indoor / Outdoor</label>
+              <label className="label-vij" htmlFor="ef-setting">{cmsCopy("text.indoor-outdoor", "Indoor / Outdoor")}</label>
               <select id="ef-setting" className={inputCls} value={f.setting} onChange={set("setting")}>
-                <option value="EITHER">Either</option>
-                <option value="INDOOR">Indoor</option>
-                <option value="OUTDOOR">Outdoor</option>
+                <option value="EITHER">{cmsCopy("text.either", "Either")}</option>
+                <option value="INDOOR">{cmsCopy("text.indoor", "Indoor")}</option>
+                <option value="OUTDOOR">{cmsCopy("text.outdoor", "Outdoor")}</option>
               </select>
             </div>
             <div className="sm:col-span-2">
-              <label className="label-vij" htmlFor="ef-venue">Preferred Venue</label>
+              <label className="label-vij" htmlFor="ef-venue">{cmsCopy("text.preferred-venue", "Preferred Venue")}</label>
               <select id="ef-venue" className={inputCls} value={f.venueInterest} onChange={set("venueInterest")}>
-                <option value="">No preference — advise me</option>
+                <option value="">{cmsCopy("text.no-preference-advise-me", "No preference — advise me")}</option>
                 {SPACES.filter((s) => s.bookableOnline).map((s) => (
                   <option key={s.slug} value={s.slug}>{s.officialName}</option>
                 ))}
@@ -189,38 +191,38 @@ export function EnquiryForm({ variant }: { variant: Variant }) {
         {variant === "VENUE_VISIT" && (
           <>
             <div>
-              <label className="label-vij" htmlFor="ef-visit-date">Preferred Visit Date *</label>
+              <label className="label-vij" htmlFor="ef-visit-date">{cmsCopy("text.preferred-visit-date", "Preferred Visit Date *")}</label>
               <input id="ef-visit-date" type="date" className={inputCls} min={new Date().toISOString().slice(0, 10)} value={f.visitDate} onChange={set("visitDate")} aria-invalid={!!errors.visitDate} />
               {errors.visitDate && <p className={errCls} role="alert">{errors.visitDate}</p>}
             </div>
             <div>
-              <label className="label-vij" htmlFor="ef-visit-time">Preferred Visit Time</label>
+              <label className="label-vij" htmlFor="ef-visit-time">{cmsCopy("text.preferred-visit-time", "Preferred Visit Time")}</label>
               <select id="ef-visit-time" className={inputCls} value={f.visitTime} onChange={set("visitTime")}>
-                <option>Morning (10:00 – 13:00)</option>
-                <option>Afternoon (14:00 – 17:00)</option>
+                <option>{cmsCopy("text.morning-10-00-13-00", "Morning (10:00 – 13:00)")}</option>
+                <option>{cmsCopy("text.afternoon-14-00-17-00", "Afternoon (14:00 – 17:00)")}</option>
               </select>
             </div>
             <div>
-              <label className="label-vij" htmlFor="ef-edate">Event Date</label>
+              <label className="label-vij" htmlFor="ef-edate">{cmsCopy("text.event-date", "Event Date")}</label>
               <input id="ef-edate" type="date" className={inputCls} min={new Date().toISOString().slice(0, 10)} value={f.eventDate} onChange={set("eventDate")} />
             </div>
             <div>
-              <label className="label-vij" htmlFor="ef-guests">Expected Guests</label>
-              <input id="ef-guests" type="number" min={10} className={inputCls} value={f.guests} onChange={set("guests")} placeholder="e.g. 300" />
+              <label className="label-vij" htmlFor="ef-guests">{cmsCopy("text.expected-guests-2", "Expected Guests")}</label>
+              <input id="ef-guests" type="number" min={10} className={inputCls} value={f.guests} onChange={set("guests")} placeholder={cmsCopy("placeholder.e-g-300-2", "e.g. 300")} />
             </div>
           </>
         )}
 
         {(variant === "CONTACT") && (
           <div>
-            <label className="label-vij" htmlFor="ef-subject">Subject</label>
+            <label className="label-vij" htmlFor="ef-subject">{cmsCopy("text.subject", "Subject")}</label>
             <select id="ef-subject" className={inputCls} value={f.subject} onChange={set("subject")}>
-              <option>General enquiry</option>
-              <option>Weddings</option>
-              <option>Business & MICE</option>
-              <option>Celebrations</option>
-              <option>Booking support</option>
-              <option>My VIJAYA portal support</option>
+              <option>{cmsCopy("text.general-enquiry", "General enquiry")}</option>
+              <option>{cmsCopy("text.weddings", "Weddings")}</option>
+              <option>{cmsCopy("text.business-mice", "Business & MICE")}</option>
+              <option>{cmsCopy("text.celebrations", "Celebrations")}</option>
+              <option>{cmsCopy("text.booking-support", "Booking support")}</option>
+              <option>{cmsCopy("text.my-vijaya-portal-support", "My VIJAYA portal support")}</option>
             </select>
           </div>
         )}
@@ -249,12 +251,10 @@ export function EnquiryForm({ variant }: { variant: Variant }) {
           </span>
         </button>
         <p className="text-[12px] text-stone flex items-center gap-2">
-          <Phone className="h-3.5 w-3.5" /> or call {SITE.contact.phone}
+          <Phone className="h-3.5 w-3.5" />{cmsCopy("text.or-call", " or call ")}{SITE.contact.phone}
         </p>
       </div>
-      <p className="mt-5 text-[11px] leading-5 text-stone/70">
-        Your enquiry creates a lead in the VIJAYA CRM with source and campaign information, so the right team member
-        responds with context. See our <a href="/privacy" className="link-underline">privacy notice</a>.
+      <p className="mt-5 text-[11px] leading-5 text-stone/70">{cmsCopy("text.your-enquiry-creates-a-lead-in-the-vijaya-crm", "Your enquiry creates a lead in the VIJAYA CRM with source and campaign information, so the right team member responds with context. See our ")}<a href="/privacy" className="link-underline">{cmsCopy("text.privacy-notice", "privacy notice")}</a>.
       </p>
     </form>
   );

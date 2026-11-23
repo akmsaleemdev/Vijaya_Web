@@ -1,5 +1,11 @@
 # VIJAYA changelog
 
+## Live CMS seeding
+
+- Seeded the existing editor-managed copy, venue records, menus, FAQ, gallery, experiences, and SEO metadata. Added typed draft and published reads with targeted revalidation, locale fallback, and a short cache TTL.
+- Converted reservation statuses, prices, timestamps, and content payloads to native PostgreSQL types. Added UTC range exclusions to bookings and the shared physical-slot ledger.
+- Split public media and private documents into separate Supabase Storage buckets and added file version hashes.
+
 ## Supabase, Vercel and offline reservations
 
 - Switched Prisma to Supabase PostgreSQL with a private schema and an exclusion constraint for overlapping venue sessions. Archived SQLite migrations and added a transactional data importer.

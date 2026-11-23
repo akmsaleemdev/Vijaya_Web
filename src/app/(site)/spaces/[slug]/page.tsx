@@ -1,3 +1,5 @@
+
+import { getComponentCopy } from "@/lib/cms/read";
 import { pageMetadata, siteContent } from "@/lib/content";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -62,6 +64,7 @@ function FeatureList({ title, icon, items }: { title: string; icon: React.ReactN
 }
 
 export default async function SpaceDetailPage({ params }: { params: Promise<{ slug: string }> }) {
+  const cmsCopy = await getComponentCopy("copy.app.site.spaces.venue.page");
   const { slug } = await params;
   const showVirtualTour = (await siteContent("site.settings"))?.showVirtualTour ?? SHOW_VIRTUAL_TOUR;
   const space = await getPublicVenue(slug);
@@ -90,29 +93,24 @@ export default async function SpaceDetailPage({ params }: { params: Promise<{ sl
           <Breadcrumbs items={[{ label: "Home", href: "/" }, { label: "Spaces", href: "/spaces" }, { label: space.officialName }]} />
           <div className="grid gap-12 lg:grid-cols-[1.2fr_1fr]">
             <Reveal>
-              <p className="eyebrow-dark">The Space</p>
-              <h2 className="h-sub mt-3">A setting composed around your occasion.</h2>
+              <p className="eyebrow-dark">{cmsCopy("text.the-space", "The Space")}</p>
+              <h2 className="h-sub mt-3">{cmsCopy("text.a-setting-composed-around-your-occasion", "A setting composed around your occasion.")}</h2>
               <p className="mt-5 text-[15px] font-light leading-8 text-stone">{space.longDescription}</p>
               {combo && (
                 <p className="mt-5 border-l-2 border-gold pl-4 text-[13px] font-light leading-7 text-stone">
-                  <strong className="font-medium text-ink">Combination ready:</strong> {combo.comboName} — this hall can
-                  function together with {combo.childSlugs.filter((c) => c !== slug).map((c) => SPACE_BY_SLUG[c]?.officialName).join(" + ")} as one
-                  combined space. If either hall is booked, the combined configuration is automatically unavailable.
-                </p>
+                  <strong className="font-medium text-ink">{cmsCopy("text.combination-ready", "Combination ready:")}</strong> {combo.comboName}{cmsCopy("text.this-hall-can-function-together-with", " — this hall can function together with ")}{combo.childSlugs.filter((c) => c !== slug).map((c) => SPACE_BY_SLUG[c]?.officialName).join(" + ")}{cmsCopy("text.as-one-combined-space-if-either-hall-is-booke", " as one combined space. If either hall is booked, the combined configuration is automatically unavailable.")}</p>
               )}
             </Reveal>
             <Reveal delay={0.1}>
               <div className="grid grid-cols-2 gap-x-6 gap-y-5">
-                <Fact label="Setting" value={space.indoorOrOutdoor === "INDOOR" ? "Indoor" : "Outdoor"} />
-                <Fact label="Guest range" value={space.guestRange ? `${space.guestRange[0]}–${space.guestRange[1]} (indicative)` : "To be confirmed"} />
-                <Fact label="Dimensions" value={space.dimensions || "To be confirmed"} />
-                <Fact label="Floor area" value={space.floorArea || "To be confirmed"} />
-                <Fact label="Ceiling height" value={space.ceilingHeight || "To be confirmed"} />
-                <Fact label="Best for" value={space.idealEventTypes.slice(0, 2).join(", ")} />
+                <Fact label={cmsCopy("label.setting", "Setting")} value={space.indoorOrOutdoor === "INDOOR" ? "Indoor" : "Outdoor"} />
+                <Fact label={cmsCopy("label.guest-range", "Guest range")} value={space.guestRange ? `${space.guestRange[0]}–${space.guestRange[1]} (indicative)` : "To be confirmed"} />
+                <Fact label={cmsCopy("label.dimensions", "Dimensions")} value={space.dimensions || "To be confirmed"} />
+                <Fact label={cmsCopy("label.floor-area", "Floor area")} value={space.floorArea || "To be confirmed"} />
+                <Fact label={cmsCopy("label.ceiling-height", "Ceiling height")} value={space.ceilingHeight || "To be confirmed"} />
+                <Fact label={cmsCopy("label.best-for", "Best for")} value={space.idealEventTypes.slice(0, 2).join(", ")} />
               </div>
-              <p className="mt-6 text-[11px] uppercase tracking-[0.16em] text-stone/70 leading-5">
-                Provisional master data — verified capacities and dimensions are published once approved by VICC.
-              </p>
+              <p className="mt-6 text-[11px] uppercase tracking-[0.16em] text-stone/70 leading-5">{cmsCopy("text.provisional-master-data-verified-capacities-a", "Provisional master data — verified capacities and dimensions are published once approved by VICC.")}</p>
             </Reveal>
           </div>
         </div>
@@ -122,8 +120,8 @@ export default async function SpaceDetailPage({ params }: { params: Promise<{ sl
       <section className="bg-ivory-deep py-16 md:py-20">
         <div className="container-editorial">
           <Reveal>
-            <p className="eyebrow-dark">Capacity &amp; Layouts</p>
-            <h2 className="h-section mt-3">Seated, Floating, Staged — Your Way</h2>
+            <p className="eyebrow-dark">{cmsCopy("text.capacity-layouts", "Capacity & Layouts")}</p>
+            <h2 className="h-section mt-3">{cmsCopy("text.seated-floating-staged-your-way", "Seated, Floating, Staged — Your Way")}</h2>
           </Reveal>
           <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {(space.capacityByLayout.length > 0 ? space.capacityByLayout : [{ layout: "Flexible", count: null }]).map((l, i) => (
@@ -143,38 +141,38 @@ export default async function SpaceDetailPage({ params }: { params: Promise<{ sl
       <section className="py-16 md:py-24">
         <div className="container-editorial grid gap-10 lg:grid-cols-2">
           <div className="space-y-8">
-            <FeatureList title="AV facilities" icon={<AudioLines className="h-4 w-4" />} items={space.avFacilities} />
-            <FeatureList title="Lighting" icon={<Lightbulb className="h-4 w-4" />} items={space.lightingFacilities} />
-            <FeatureList title="Stage" icon={<Sparkles className="h-4 w-4" />} items={space.stageDetails} />
-            <FeatureList title="VIP facilities" icon={<HeartHandshake className="h-4 w-4" />} items={space.vipFacilities} />
+            <FeatureList title={cmsCopy("title.av-facilities", "AV facilities")} icon={<AudioLines className="h-4 w-4" />} items={space.avFacilities} />
+            <FeatureList title={cmsCopy("title.lighting", "Lighting")} icon={<Lightbulb className="h-4 w-4" />} items={space.lightingFacilities} />
+            <FeatureList title={cmsCopy("title.stage", "Stage")} icon={<Sparkles className="h-4 w-4" />} items={space.stageDetails} />
+            <FeatureList title={cmsCopy("title.vip-facilities", "VIP facilities")} icon={<HeartHandshake className="h-4 w-4" />} items={space.vipFacilities} />
           </div>
           <div className="space-y-8">
             <Reveal>
               <div className="hairline-t pt-6">
-                <h3 className="flex items-center gap-2.5 text-[13px] font-medium uppercase tracking-[0.18em]"><Ruler className="h-4 w-4 text-gold" /> Green rooms</h3>
+                <h3 className="flex items-center gap-2.5 text-[13px] font-medium uppercase tracking-[0.18em]"><Ruler className="h-4 w-4 text-gold" />{cmsCopy("text.green-rooms", " Green rooms")}</h3>
                 <p className="mt-3 text-[13px] font-light leading-7 text-stone">{space.greenRooms}</p>
               </div>
             </Reveal>
             <Reveal delay={0.05}>
               <div className="hairline-t pt-6 grid sm:grid-cols-2 gap-6">
                 <div>
-                  <h3 className="flex items-center gap-2.5 text-[13px] font-medium uppercase tracking-[0.18em]"><DoorOpen className="h-4 w-4 text-gold" /> Guest entry</h3>
+                  <h3 className="flex items-center gap-2.5 text-[13px] font-medium uppercase tracking-[0.18em]"><DoorOpen className="h-4 w-4 text-gold" />{cmsCopy("text.guest-entry", " Guest entry")}</h3>
                   <p className="mt-3 text-[13px] font-light leading-7 text-stone">{space.guestEntry}</p>
                 </div>
                 <div>
-                  <h3 className="flex items-center gap-2.5 text-[13px] font-medium uppercase tracking-[0.18em]"><DoorOpen className="h-4 w-4 text-gold" /> Service entry</h3>
+                  <h3 className="flex items-center gap-2.5 text-[13px] font-medium uppercase tracking-[0.18em]"><DoorOpen className="h-4 w-4 text-gold" />{cmsCopy("text.service-entry", " Service entry")}</h3>
                   <p className="mt-3 text-[13px] font-light leading-7 text-stone">{space.serviceEntry}</p>
                 </div>
                 <div>
-                  <h3 className="flex items-center gap-2.5 text-[13px] font-medium uppercase tracking-[0.18em]"><Car className="h-4 w-4 text-gold" /> Parking</h3>
+                  <h3 className="flex items-center gap-2.5 text-[13px] font-medium uppercase tracking-[0.18em]"><Car className="h-4 w-4 text-gold" />{cmsCopy("text.parking", " Parking")}</h3>
                   <p className="mt-3 text-[13px] font-light leading-7 text-stone">{space.parkingNotes}</p>
                 </div>
                 <div>
-                  <h3 className="flex items-center gap-2.5 text-[13px] font-medium uppercase tracking-[0.18em]"><PersonStanding className="h-4 w-4 text-gold" /> Accessibility</h3>
+                  <h3 className="flex items-center gap-2.5 text-[13px] font-medium uppercase tracking-[0.18em]"><PersonStanding className="h-4 w-4 text-gold" />{cmsCopy("text.accessibility", " Accessibility")}</h3>
                   <p className="mt-3 text-[13px] font-light leading-7 text-stone">{space.accessibility}</p>
                 </div>
                 <div>
-                  <h3 className="flex items-center gap-2.5 text-[13px] font-medium uppercase tracking-[0.18em]"><Toilet className="h-4 w-4 text-gold" /> Restrooms</h3>
+                  <h3 className="flex items-center gap-2.5 text-[13px] font-medium uppercase tracking-[0.18em]"><Toilet className="h-4 w-4 text-gold" />{cmsCopy("text.restrooms", " Restrooms")}</h3>
                   <p className="mt-3 text-[13px] font-light leading-7 text-stone">{space.restrooms}</p>
                 </div>
               </div>
@@ -187,8 +185,8 @@ export default async function SpaceDetailPage({ params }: { params: Promise<{ sl
       <section className="bg-ivory-deep py-16 md:py-20">
         <div className="container-editorial grid gap-10 lg:grid-cols-2 lg:items-center">
           <Reveal>
-            <p className="eyebrow-dark">Floor Plan</p>
-            <h2 className="h-section mt-3">The Layout, Before Load-In</h2>
+            <p className="eyebrow-dark">{cmsCopy("text.floor-plan", "Floor Plan")}</p>
+            <h2 className="h-section mt-3">{cmsCopy("text.the-layout-before-load-in", "The Layout, Before Load-In")}</h2>
             <p className="lede mt-4">
               {space.floorPlan
                 ? "Review the hall plan and share it with your decorators and production team."
@@ -202,8 +200,8 @@ export default async function SpaceDetailPage({ params }: { params: Promise<{ sl
               ) : (
                 <div className="text-center px-8 py-10">
                   <Ruler className="h-6 w-6 text-gold mx-auto" aria-hidden />
-                  <p className="mt-4 text-sm font-medium">Floor plan — after verified survey approval</p>
-                  <p className="mt-1 text-[12px] text-stone">Ask the events team for the working plan for your dates</p>
+                  <p className="mt-4 text-sm font-medium">{cmsCopy("text.floor-plan-after-verified-survey-approval", "Floor plan — after verified survey approval")}</p>
+                  <p className="mt-1 text-[12px] text-stone">{cmsCopy("text.ask-the-events-team-for-the-working-plan-for", "Ask the events team for the working plan for your dates")}</p>
                 </div>
               )}
             </div>
@@ -215,8 +213,8 @@ export default async function SpaceDetailPage({ params }: { params: Promise<{ sl
       <section className="py-16 md:py-24">
         <div className="container-editorial">
           <Reveal>
-            <p className="eyebrow-dark">Gallery</p>
-            <h2 className="h-section mt-3">{space.officialName}, Viewed Closely</h2>
+            <p className="eyebrow-dark">{cmsCopy("text.gallery", "Gallery")}</p>
+            <h2 className="h-section mt-3">{space.officialName}{cmsCopy("text.viewed-closely", ", Viewed Closely")}</h2>
           </Reveal>
           {space.galleryAlts ? (
             <SpaceGallery
@@ -246,10 +244,10 @@ export default async function SpaceDetailPage({ params }: { params: Promise<{ sl
             <div className="relative aspect-video border border-ivory/10 flex items-center justify-center bg-sand/5">
               <div className="text-center px-6">
                 <Video className="h-7 w-7 text-gold mx-auto" aria-hidden />
-                <p className="mt-4 text-sm text-ivory/60 font-light">{space.officialName} film — awaiting official VIJAYA media</p>
+                <p className="mt-4 text-sm text-ivory/60 font-light">{space.officialName}{cmsCopy("text.film-awaiting-official-vijaya-media", " film — awaiting official VIJAYA media")}</p>
               </div>
             </div>
-            <h3 className="mt-5 text-lg font-normal">Film &amp; Showreel</h3>
+            <h3 className="mt-5 text-lg font-normal">{cmsCopy("text.film-showreel", "Film & Showreel")}</h3>
           </Reveal>
           {showVirtualTour && (
           <Reveal delay={0.1}>
@@ -257,13 +255,13 @@ export default async function SpaceDetailPage({ params }: { params: Promise<{ sl
               {space.scenes360.length > 0 ? (
                 <Media src={`/media/${space.scenes360[0]}.jpg`} alt={`${space.officialName} 360 preview — placeholder`} sizes="50vw" tag={false} />
               ) : (
-                <div className="absolute inset-0 flex items-center justify-center text-ivory/50 text-sm">360 not available for this space</div>
+                <div className="absolute inset-0 flex items-center justify-center text-ivory/50 text-sm">{cmsCopy("text.360-not-available-for-this-space", "360 not available for this space")}</div>
               )}
               <div className="absolute inset-0 bg-ink/40 flex items-center justify-center">
-                <Link href="/360-tour" className="btn-gold"><Maximize className="h-4 w-4" /><span>Open 360° Experience</span></Link>
+                <Link href="/360-tour" className="btn-gold"><Maximize className="h-4 w-4" /><span>{cmsCopy("text.open-360-experience", "Open 360° Experience")}</span></Link>
               </div>
             </div>
-            <h3 className="mt-5 text-lg font-normal">360° Experience</h3>
+            <h3 className="mt-5 text-lg font-normal">{cmsCopy("text.360-experience", "360° Experience")}</h3>
           </Reveal>
           )}
         </div>
@@ -273,19 +271,16 @@ export default async function SpaceDetailPage({ params }: { params: Promise<{ sl
       <section id="availability" className="bg-ivory-deep py-16 md:py-24 scroll-mt-20">
         <div className="container-editorial grid gap-12 lg:grid-cols-2">
           <Reveal>
-            <p className="eyebrow-dark">Availability</p>
-            <h2 className="h-section mt-3">Is Your Date Free?</h2>
-            <p className="lede mt-4">
-              Validated server-side and synchronised with the VIJAYA booking office — offline bookings block online
-              instantly.
-            </p>
+            <p className="eyebrow-dark">{cmsCopy("text.availability", "Availability")}</p>
+            <h2 className="h-section mt-3">{cmsCopy("text.is-your-date-free", "Is Your Date Free?")}</h2>
+            <p className="lede mt-4">{cmsCopy("text.validated-server-side-and-synchronised-with-t", "Validated server-side and synchronised with the VIJAYA booking office — offline bookings block online instantly.")}</p>
             <div className="mt-8">
               <SpaceAvailabilityWidget slug={space.slug} />
             </div>
           </Reveal>
           <Reveal delay={0.1}>
-            <p className="eyebrow-dark">Pricing</p>
-            <h2 className="h-section mt-3">Indicative Rates</h2>
+            <p className="eyebrow-dark">{cmsCopy("text.pricing", "Pricing")}</p>
+            <h2 className="h-section mt-3">{cmsCopy("text.indicative-rates", "Indicative Rates")}</h2>
             <div className="mt-6 card-editorial divide-y divide-border">
               {SLOTS.map((s) => {
                 const p = space.pricing[s.id];
@@ -300,13 +295,10 @@ export default async function SpaceDetailPage({ params }: { params: Promise<{ sl
                 );
               })}
             </div>
-            <p className="mt-4 text-[12px] leading-6 text-stone">
-              Sample rates pending VIJAYA approval. Taxes, deposit terms and seasonal rules are confirmed at
-              quotation — no hidden charges appear at checkout.
-            </p>
+            <p className="mt-4 text-[12px] leading-6 text-stone">{cmsCopy("text.sample-rates-pending-vijaya-approval-taxes-de", "Sample rates pending VIJAYA approval. Taxes, deposit terms and seasonal rules are confirmed at quotation — no hidden charges appear at checkout.")}</p>
             <div className="mt-8 flex flex-wrap gap-4">
-              <Link href={`/check-your-date?venue=${space.slug}`} className="btn-primary"><span>Book This Space</span></Link>
-              <Link href={`/venue-visit?venue=${space.slug}`} className="btn-outline"><span>Book Venue Visit</span></Link>
+              <Link href={`/check-your-date?venue=${space.slug}`} className="btn-primary"><span>{cmsCopy("text.book-this-space", "Book This Space")}</span></Link>
+              <Link href={`/venue-visit?venue=${space.slug}`} className="btn-outline"><span>{cmsCopy("text.book-venue-visit", "Book Venue Visit")}</span></Link>
             </div>
           </Reveal>
         </div>
@@ -317,9 +309,8 @@ export default async function SpaceDetailPage({ params }: { params: Promise<{ sl
         <section className="py-16 md:py-24">
           <div className="container-editorial">
             <Reveal className="flex items-end justify-between gap-6">
-              <h2 className="h-section">Also Consider</h2>
-              <Link href="/spaces" className="link-underline text-[13px] uppercase tracking-[0.18em] inline-flex items-center gap-2">
-                All spaces <ArrowRight className="h-4 w-4" />
+              <h2 className="h-section">{cmsCopy("text.also-consider", "Also Consider")}</h2>
+              <Link href="/spaces" className="link-underline text-[13px] uppercase tracking-[0.18em] inline-flex items-center gap-2">{cmsCopy("text.all-spaces", "All spaces ")}<ArrowRight className="h-4 w-4" />
               </Link>
             </Reveal>
             <div className="mt-10 grid gap-6 md:grid-cols-3">

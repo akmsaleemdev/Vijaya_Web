@@ -1,4 +1,6 @@
 "use client";
+import { useCmsCopy } from "@/lib/cms/client";
+
 
 /**
  * Check Your Date — the core booking product (steps 1–6 of the 9-step journey).
@@ -39,7 +41,8 @@ interface CheckResponse {
 
 const EASE = [0.22, 1, 0.36, 1] as const;
 
-export function CheckYourDateWizard() {
+export function CheckYourDateWizard({ showVirtualTour = SHOW_VIRTUAL_TOUR }: { showVirtualTour?: boolean } = {}) {
+  const cmsCopy = useCmsCopy("copy.components.booking.check-date-wizard");
   const router = useRouter();
   const params = useSearchParams();
 
@@ -145,7 +148,7 @@ export function CheckYourDateWizard() {
   return (
     <div className="container-editorial max-w-4xl">
       {/* Progress */}
-      <ol className="flex items-center gap-2 mb-8" aria-label="Booking progress">
+      <ol className="flex items-center gap-2 mb-8" aria-label={cmsCopy("aria-label.booking-progress", "Booking progress")}>
         {progress.map((label, i) => {
           const n = i + 1;
           const done = step > n;
@@ -182,7 +185,7 @@ export function CheckYourDateWizard() {
           {/* ------------------------------------------------ STEP 1 */}
           {step === 1 && (
             <div>
-              <h2 className="h-section">What are you planning?</h2>
+              <h2 className="h-section">{cmsCopy("text.what-are-you-planning", "What are you planning?")}</h2>
               <div className="mt-8 grid gap-4 md:grid-cols-3">
                 {EVENT_CATEGORIES.map((c) => {
                   const icons = { WEDDING: Heart, BUSINESS: Briefcase, CELEBRATION: PartyPopper } as const;
@@ -209,18 +212,17 @@ export function CheckYourDateWizard() {
           {step === 2 && (
             <div>
               <button onClick={() => setStep(1)} className="mb-6 inline-flex items-center gap-2 text-[12px] uppercase tracking-[0.16em] text-stone hover:text-ink transition-colors">
-                <ArrowLeft className="h-4 w-4" /> Back
-              </button>
-              <h2 className="h-section">When?</h2>
+                <ArrowLeft className="h-4 w-4" />{cmsCopy("text.back", " Back")}</button>
+              <h2 className="h-section">{cmsCopy("text.when", "When?")}</h2>
               <div className="mt-8 grid gap-8 lg:grid-cols-[1.2fr_1fr]">
                 {/* Custom availability calendar */}
                 <div className="card-editorial p-6">
                   <div className="flex items-center justify-between mb-5">
-                    <button onClick={() => prevMonth(month, setMonth)} aria-label="Previous month" className="p-2 hover:bg-muted rounded-sm transition-colors">
+                    <button onClick={() => prevMonth(month, setMonth)} aria-label={cmsCopy("aria-label.previous-month", "Previous month")} className="p-2 hover:bg-muted rounded-sm transition-colors">
                       <ChevronLeft className="h-4 w-4" />
                     </button>
                     <p className="text-[14px] font-medium">{monthLabel(month)}</p>
-                    <button onClick={() => nextMonth(month, setMonth)} aria-label="Next month" className="p-2 hover:bg-muted rounded-sm transition-colors">
+                    <button onClick={() => nextMonth(month, setMonth)} aria-label={cmsCopy("aria-label.next-month", "Next month")} className="p-2 hover:bg-muted rounded-sm transition-colors">
                       <ChevronRight className="h-4 w-4" />
                     </button>
                   </div>
@@ -258,14 +260,14 @@ export function CheckYourDateWizard() {
                     })}
                   </div>
                   <div className="mt-5 flex flex-wrap gap-4 text-[11px] text-stone">
-                    <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-burgundy" /> Selected</span>
-                    <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-muted" /> Unavailable</span>
-                    <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-gold/40" /> Limited spaces</span>
+                    <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-burgundy" />{cmsCopy("text.selected", " Selected")}</span>
+                    <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-muted" />{cmsCopy("text.unavailable", " Unavailable")}</span>
+                    <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-gold/40" />{cmsCopy("text.limited-spaces", " Limited spaces")}</span>
                   </div>
                 </div>
                 {/* Slot + continue */}
                 <div>
-                  <p className="label-vij">Slot</p>
+                  <p className="label-vij">{cmsCopy("text.slot", "Slot")}</p>
                   <div className="grid gap-3">
                     {SLOTS.map((s) => (
                       <button
@@ -290,9 +292,9 @@ export function CheckYourDateWizard() {
                     onClick={() => setStep(3)}
                     className="btn-primary mt-6 w-full disabled:opacity-40"
                   >
-                    <span>Continue</span> <ArrowRight className="h-4 w-4" />
+                    <span>{cmsCopy("text.continue", "Continue")}</span> <ArrowRight className="h-4 w-4" />
                   </button>
-                  {!date && <p className="mt-3 text-[12px] text-stone">Select a date to continue.</p>}
+                  {!date && <p className="mt-3 text-[12px] text-stone">{cmsCopy("text.select-a-date-to-continue", "Select a date to continue.")}</p>}
                 </div>
               </div>
             </div>
@@ -302,9 +304,8 @@ export function CheckYourDateWizard() {
           {step === 3 && (
             <div>
               <button onClick={() => setStep(2)} className="mb-6 inline-flex items-center gap-2 text-[12px] uppercase tracking-[0.16em] text-stone hover:text-ink transition-colors">
-                <ArrowLeft className="h-4 w-4" /> Back
-              </button>
-              <h2 className="h-section">How many guests?</h2>
+                <ArrowLeft className="h-4 w-4" />{cmsCopy("text.back-2", " Back")}</button>
+              <h2 className="h-section">{cmsCopy("text.how-many-guests", "How many guests?")}</h2>
               <div className="mt-8 max-w-xl">
                 <div className="card-editorial p-8">
                   <div className="flex items-center justify-between">
@@ -313,7 +314,7 @@ export function CheckYourDateWizard() {
                       <button
                         onClick={() => setGuests(String(Math.max(10, (parseInt(guests, 10) || 100) - 25)))}
                         className="h-11 w-11 rounded-full border border-border hover:border-burgundy transition-colors"
-                        aria-label="Fewer guests"
+                        aria-label={cmsCopy("aria-label.fewer-guests", "Fewer guests")}
                       >−</button>
                       <input
                         type="number"
@@ -322,16 +323,16 @@ export function CheckYourDateWizard() {
                         value={guests}
                         onChange={(e) => { setGuests(e.target.value); if (e.target.value) track("guest_count_selected", {}); }}
                         className="w-28 text-center text-3xl font-light bg-transparent border-b border-border focus:border-gold focus:outline-none"
-                        aria-label="Expected guests"
+                        aria-label={cmsCopy("aria-label.expected-guests", "Expected guests")}
                       />
                       <button
                         onClick={() => setGuests(String((parseInt(guests, 10) || 100) + 25))}
                         className="h-11 w-11 rounded-full border border-border hover:border-burgundy transition-colors"
-                        aria-label="More guests"
+                        aria-label={cmsCopy("aria-label.more-guests", "More guests")}
                       >+</button>
                     </div>
                   </div>
-                  <p className="mt-6 text-[12px] text-stone text-center">An estimate is fine — it helps us match the right halls.</p>
+                  <p className="mt-6 text-[12px] text-stone text-center">{cmsCopy("text.an-estimate-is-fine-it-helps-us-match-the-rig", "An estimate is fine — it helps us match the right halls.")}</p>
                 </div>
                 <button
                   disabled={!guests || parseInt(guests, 10) < 1}
@@ -354,13 +355,10 @@ export function CheckYourDateWizard() {
           {step === 4 && results && (
             <div>
               <button onClick={() => setStep(3)} className="mb-6 inline-flex items-center gap-2 text-[12px] uppercase tracking-[0.16em] text-stone hover:text-ink transition-colors">
-                <ArrowLeft className="h-4 w-4" /> Back
-              </button>
-              <h2 className="h-section">Available Spaces</h2>
+                <ArrowLeft className="h-4 w-4" />{cmsCopy("text.back-3", " Back")}</button>
+              <h2 className="h-section">{cmsCopy("text.available-spaces", "Available Spaces")}</h2>
               <p className="lede mt-3 text-[14px] max-w-2xl">
-                {prettyDate(date)} · {SLOTS.find((s) => s.id === slot)?.label} · {guests} guests. Only compatible,
-                available spaces are shown.
-              </p>
+                {prettyDate(date)} · {SLOTS.find((s) => s.id === slot)?.label} · {guests}{cmsCopy("text.guests-only-compatible-available-spaces-are-s", " guests. Only compatible, available spaces are shown.")}</p>
 
               {results.crmNotice && (
                 <p className="mt-5 flex items-start gap-2.5 border border-gold/40 bg-gold/10 p-4 text-[12px] leading-6 text-stone">
@@ -383,7 +381,7 @@ export function CheckYourDateWizard() {
                             <div>
                               <div className="flex items-center gap-2">
                                 <h3 className="text-lg font-medium">{s.name}</h3>
-                                {s.isCombo && <span className="chip !py-0.5 !text-[9px]">Combined</span>}
+                                {s.isCombo && <span className="chip !py-0.5 !text-[9px]">{cmsCopy("text.combined", "Combined")}</span>}
                               </div>
                               <p className="mt-1 text-[12px] text-stone">
                                 {s.setting === "INDOOR" ? "Indoor" : "Outdoor"}
@@ -404,7 +402,7 @@ export function CheckYourDateWizard() {
                                 <span>{holding === s.slug ? "Creating hold" : "Hold This Space"}</span>
                               </button>
                             ) : (
-                              <span className="text-[12px] text-stone italic">Unavailable for this slot — try another date or space.</span>
+                              <span className="text-[12px] text-stone italic">{cmsCopy("text.unavailable-for-this-slot-try-another-date-or", "Unavailable for this slot — try another date or space.")}</span>
                             )}
                             <button
                               onClick={() => setExpanded(expanded === s.slug ? null : s.slug)}
@@ -413,9 +411,7 @@ export function CheckYourDateWizard() {
                             >
                               <span>{expanded === s.slug ? "Hide details" : "Explore"}</span>
                             </button>
-                            <a href={`/spaces/${s.slug}`} target="_blank" rel="noreferrer" className="link-underline text-[11px] uppercase tracking-[0.16em] text-burgundy">
-                              Full page
-                            </a>
+                            <a href={`/spaces/${s.slug}`} target="_blank" rel="noreferrer" className="link-underline text-[11px] uppercase tracking-[0.16em] text-burgundy">{cmsCopy("text.full-page", "Full page")}</a>
                           </div>
                         </div>
                       </div>
@@ -432,22 +428,21 @@ export function CheckYourDateWizard() {
                           >
                             <div className="p-6 grid gap-6 md:grid-cols-3 text-[13px]">
                               <div>
-                                <p className="label-vij">Best for</p>
+                                <p className="label-vij">{cmsCopy("text.best-for", "Best for")}</p>
                                 <p className="font-light text-stone">{space.idealEventTypes.join(", ")}</p>
-                                <p className="label-vij mt-4">Layouts</p>
+                                <p className="label-vij mt-4">{cmsCopy("text.layouts", "Layouts")}</p>
                                 <p className="font-light text-stone">{space.seatingLayouts.join(", ") || "—"}</p>
                               </div>
                               <div>
-                                <p className="label-vij">AV &amp; lighting</p>
+                                <p className="label-vij">{cmsCopy("text.av-lighting", "AV & lighting")}</p>
                                 <p className="font-light text-stone">{[...space.avFacilities, ...space.lightingFacilities].slice(0, 4).join(", ") || "—"}</p>
-                                <p className="label-vij mt-4">Slot rules</p>
+                                <p className="label-vij mt-4">{cmsCopy("text.slot-rules", "Slot rules")}</p>
                                 <p className="font-light text-stone">{space.slotRules}</p>
                               </div>
                               <div>
-                                {SHOW_VIRTUAL_TOUR && space.scenes360.length > 0 && (
+                                {showVirtualTour && space.scenes360.length > 0 && (
                                   <a href="/360-tour" target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 text-burgundy link-underline">
-                                    <Maximize className="h-4 w-4" /> Walk this space in 360°
-                                  </a>
+                                    <Maximize className="h-4 w-4" />{cmsCopy("text.walk-this-space-in-360", " Walk this space in 360°")}</a>
                                 )}
                                 <div className="mt-4 grid grid-cols-3 gap-2">
                                   {space.gallery.slice(0, 3).map((g, i) => (

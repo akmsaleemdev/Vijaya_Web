@@ -1,9 +1,12 @@
+
+import { getComponentCopy } from "@/lib/cms/read";
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 
-export function Breadcrumbs({ items }: { items: { label: string; href?: string }[] }) {
+export async function Breadcrumbs({ items }: { items: { label: string; href?: string }[] }) {
+  const cmsCopy = await getComponentCopy("copy.components.seo.breadcrumbs");
   return (
-    <nav aria-label="Breadcrumb" className="mb-6">
+    <nav aria-label={cmsCopy("aria-label.breadcrumb", "Breadcrumb")} className="mb-6">
       <ol className="flex flex-wrap items-center gap-1.5 text-[11px] uppercase tracking-[0.16em] text-stone">
         {items.map((item, i) => (
           <li key={i} className="flex items-center gap-1.5">

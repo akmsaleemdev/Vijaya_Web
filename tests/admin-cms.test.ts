@@ -140,6 +140,17 @@ test("standalone CMS authentication, atomic booking and publishing", { timeout: 
       (error: unknown) => !!error && typeof error === "object" && "meta" in error &&
         !!error.meta && typeof error.meta === "object" && "code" in error.meta && error.meta.code === "23P01",
     );
+    await assert.rejects(
+      prisma.$executeRaw`INSERT INTO "Booking"
+        ("id", "reference", "spaceId", "spaceName", "eventType", "eventDate", "slot", "guests", "status",
+         "customerName", "customerPhone", "customerEmail", "baseAmount", "totalPayable", "updatedAt")
+        VALUES ('direct-booking-test', 'direct-booking-test', 'periyar', 'Periyar', 'WEDDING', ${baseBooking.date},
+          'EVENING', 800, 'CONFIRMED', 'Fixture', '', 'fixture@example.test', 0, 0, NOW())`,
+      (error: unknown) => !!error && typeof error === "object" && "meta" in error &&
+        !!error.meta && typeof error.meta === "object" && "code" in error.meta && error.meta.code === "23P01",
+    );
+    const expired = await prisma.$queryRaw<{ count: number }[]>`SELECT vijaya.expire_holds() AS count`;
+    assert.equal(expired[0]?.count, 1);
   } finally {
     await prisma.$disconnect();
   }
@@ -182,8 +193,15 @@ test("standalone CMS authentication, atomic booking and publishing", { timeout: 
 
   const heading = "Standalone CMS publication check";
   const content = { key: "home.hero", locale: "en", action: "PUBLISH", payload: { heading } };
+  assert.equal((await api("/api/admin/content", "POST", { ...content, action: "DRAFT" }, admin)).status, 200);
+  assert.doesNotMatch(await api("/").then((response) => response.text()), new RegExp(heading));
+  const preview = await api("/api/admin/preview?enabled=true", "POST", undefined, admin);
+  assert.equal(preview.status, 200);
+  assert.match(await api("/", "GET", undefined, admin + "; " + cookies(preview)).then((response) => response.text()), new RegExp(heading));
+  const started = Date.now();
   assert.equal((await api("/api/admin/content", "POST", content, admin)).status, 200);
   assert.match(await api("/").then((response) => response.text()), new RegExp(heading));
+  assert.ok(Date.now() - started < 5000, "Published hero took longer than five seconds.");
   assert.equal((await api("/api/admin/content", "POST", { ...content, action: "DELETE" }, admin)).status, 200);
   assert.doesNotMatch(await api("/").then((response) => response.text()), new RegExp(heading));
 
@@ -192,6 +210,20 @@ test("standalone CMS authentication, atomic booking and publishing", { timeout: 
   assert.match(await api("/gallery").then((response) => response.text()), /Gallery publication verification/);
   assert.equal((await api("/api/admin/content", "POST", { ...gallery, action: "DELETE" }, admin)).status, 200);
   assert.doesNotMatch(await api("/gallery").then((response) => response.text()), /Gallery publication verification/);
+
+  const publish = async (key: string, payload: unknown) => {
+    const response = await api("/api/admin/content", "POST", { key, locale: "en", action: "PUBLISH", payload }, admin);
+    assert.equal(response.status, 200, await response.clone().text());
+  };
+  await api("/spaces/periyar");
+  await publish("venue.periyar", { shortDescription: "Live Periyar description verification" });
+  assert.match(await api("/spaces/periyar").then((response) => response.text()), /Live Periyar description verification/);
+  await publish("site.contact", { phone: "+91 469 123 4567" });
+  assert.match(await api("/").then((response) => response.text()), /\+91 469 123 4567/);
+  await publish("site.settings", { showVirtualTour: true });
+  assert.match(await api("/").then((response) => response.text()), /href="\/360-tour"/);
+  await publish("site.settings", { showVirtualTour: false });
+  assert.doesNotMatch(await api("/").then((response) => response.text()), /<a[^>]*href="\/360-tour"/);
 
   for (let index = 0; index < 5; index++) assert.equal(await signIn(bootstrap), "");
   assert.equal(await signIn(newPassword), "");
