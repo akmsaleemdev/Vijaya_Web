@@ -1,0 +1,191 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// VIJAYA Booking Platform — data model
+// Source of truth flow: Website/Booking UI <-> VIJAYA Booking Service <-> CRM
+// ---------------------------------------------------------------------------
+
+/// Bookable inventory mirror (synced/seeded from master data). Editable by ops/CRM.
+model Space {
+  id                 String   @id // slug
+  crmVenueId         String?  // CRM linkage — populated when CRM is confirmed
+  name               String
+  category           String   // WEDDING | BUSINESS | CELEBRATION | MULTI
+  setting            String   // INDOOR | OUTDOOR
+  capacityMin        Int?
+  capacityMax        Int?
+  bookableOnline     Boolean  @default(true)
+  requiresApproval   Boolean  @default(false)
+  availabilityEnabled Boolean @default(true)
+  active             Boolean  @default(true)
+  slotStates         SlotState[]
+  bookings           Booking[]
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+/// One row per space/date/slot that is NOT available. Absence of a row = AVAILABLE.
+/// Unique constraint on (spaceId,date,slot) gives atomic double-booking protection.
+model SlotState {
+  id            String    @id @default(cuid())
+  spaceId       String
+  date          String // YYYY-MM-DD
+  slot          String // MORNING | AFTERNOON | EVENING | FULL_DAY
+  status        String // TEMPORARY_HOLD | PENDING_PAYMENT | CONFIRMED | BLOCKED | MAINTENANCE | INTERNAL_USE
+  source        String    @default("ONLINE") // ONLINE | OFFLINE_CRM | OPS
+  holdExpiresAt DateTime?
+  bookingRef    String?
+  note          String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  space         Space     @relation(fields: [spaceId], references: [id])
+
+  @@unique([spaceId, date, slot])
+  @@index([date, slot])
+}
+
+/// Customer booking record.
+model Booking {
+  id             String    @id @default(cuid())
+  reference      String    @unique // VIJ-XXXXXX
+  spaceId        String // space slug or combo slug (e.g. nila-pamba)
+  spaceName      String
+  childSpaceIds  String? // JSON array — child spaces blocked for combos
+  eventType      String // WEDDING | BUSINESS | CELEBRATION
+  eventDate      String // YYYY-MM-DD
+  slot           String
+  guests         Int
+  status         String // HOLD | PENDING_PAYMENT | CONFIRMED | CANCELLED | EXPIRED
+  crmSync        String    @default("NOT_CONNECTED") // NOT_CONNECTED | SYNCED | QUEUED | FAILED
+  customerName   String
+  customerPhone  String
+  customerEmail  String
+  customerCountry String   @default("India")
+  notes          String?
+  baseAmount     Int
+  weekendUplift  Int       @default(0)
+  taxAmount      Int       @default(0)
+  depositAmount  Int       @default(0)
+  totalPayable   Int
+  addons         String? // JSON array
+  holdExpiresAt  DateTime?
+  confirmedAt    DateTime?
+  cancelledAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  space          Space     @relation(fields: [spaceId], references: [id])
+  payments       Payment[]
+  documents      Document[]
+  milestones     Milestone[]
+
+  @@index([customerEmail])
+  @@index([eventDate])
+}
+
+/// Payment transactions — idempotent, gateway-ready.
+model Payment {
+  id             String   @id @default(cuid())
+  bookingId      String
+  provider       String   @default("SANDBOX") // SANDBOX until gateway is confirmed
+  providerRef    String   @unique
+  idempotencyKey String   @unique
+  amount         Int
+  status         String // INITIATED | PENDING | SUCCESS | FAILED | REFUNDED
+  method         String?
+  transactionId  String?
+  failureReason  String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  booking        Booking  @relation(fields: [bookingId], references: [id])
+
+  @@index([bookingId])
+}
+
+/// Leads from Plan Your Event, Venue Visit, Contact, Global Desk and concierge handoffs.
+model Lead {
+  id            String   @id @default(cuid())
+  type          String // PLAN_EVENT | VENUE_VISIT | CONTACT | GLOBAL_DESK | CONCIERGE
+  stage         String   @default("New Lead") // CRM pipeline stage
+  name          String
+  phone         String
+  email         String
+  country       String?
+  eventType     String?
+  eventDate     String?
+  slot          String?
+  guests        Int?
+  venueInterest String?
+  setting       String? // INDOOR | OUTDOOR | EITHER
+  visitDate     String?
+  visitTime     String?
+  message       String?
+  source        String   @default("website")
+  utmJson       String? // JSON string — utm_source etc.
+  createdAt     DateTime @default(now())
+
+  @@index([type])
+}
+
+/// Post-booking documents (confirmation, invoice, receipt, agreement, uploads).
+model Document {
+  id        String   @id @default(cuid())
+  bookingId String
+  type      String // CONFIRMATION | INVOICE | RECEIPT | AGREEMENT | UPLOAD
+  title     String
+  createdAt DateTime @default(now())
+  booking   Booking  @relation(fields: [bookingId], references: [id])
+}
+
+/// Event plan milestones shown in My VIJAYA.
+model Milestone {
+  id        String    @id @default(cuid())
+  bookingId String
+  title     String
+  detail    String?
+  dueDate   String?
+  status    String    @default("UPCOMING") // UPCOMING | DONE
+  order     Int       @default(0)
+  createdAt DateTime  @default(now())
+  booking   Booking   @relation(fields: [bookingId], references: [id])
+}
+
+/// Support requests from the portal.
+model SupportTicket {
+  id        String   @id @default(cuid())
+  bookingRef String?
+  name      String
+  email     String
+  subject   String
+  message   String
+  status    String   @default("OPEN")
+  createdAt DateTime @default(now())
+}
+
+/// Analytics events (fire-and-forget beacon).
+model AnalyticsEvent {
+  id        String   @id @default(cuid())
+  name      String
+  path      String?
+  sessionId String?
+  metaJson  String?
+  createdAt DateTime @default(now())
+
+  @@index([name])
+}
+
+/// Audit log for booking updates (security requirement).
+model AuditLog {
+  id        String   @id @default(cuid())
+  action    String
+  entity    String
+  entityRef String
+  detailJson String?
+  createdAt DateTime @default(now())
+}
